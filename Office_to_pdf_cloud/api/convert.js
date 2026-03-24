@@ -45,7 +45,10 @@ export default async function handler(req, res) {
             libre.convert(fileBuffer, '.pdf', undefined, (convertErr, done) => {
                 if (convertErr) {
                     console.error('LibreOffice conversion error:', convertErr);
-                    return res.status(500).json({ error: 'Error during PDF conversion.' });
+                    return res.status(500).json({
+                        error: 'Error during PDF conversion.',
+                        details: convertErr.message || String(convertErr)
+                    });
                 }
 
                 // If conversion is successful, send the PDF file back to the browser!
@@ -55,7 +58,10 @@ export default async function handler(req, res) {
             });
         } catch (readErr) {
             console.error('File read error:', readErr);
-            res.status(500).json({ error: 'Unable to process the file on the server.' });
+            res.status(500).json({
+                error: 'Unable to process the file on the server.',
+                details: readErr.message || String(readErr)
+            });
         }
     });
 }
