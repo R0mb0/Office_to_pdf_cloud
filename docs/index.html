@@ -450,57 +450,68 @@
                 }
             }
 
-            // Da HTML a PDF usando html2pdf (Allineamento e Margini Corretti)
+            // Da HTML a PDF usando html2pdf (Gestione crash immagini Word)
             async function createPdfFromHtml(htmlContent, filename) {
+                // Trucco Anti-Crash: se un'immagine (es. formati EMF/PDF incorporati da Word) 
+                // è illeggibile, forziamo il browser a nasconderla per non far bloccare la generazione
+                const safeHtmlContent = htmlContent.replace(/<img /g, '<img onerror="this.style.display=\'none\';" ');
+
                 const fullHtml = `
                     <div id="pdf-wrapper" style="font-family: Arial, sans-serif; color: black; line-height: 1.6;">
                         <style>
-                            /* Reset di base: impedisce a padding e bordi di allargare gli elementi fuori pagina */
                             * { box-sizing: border-box; }
-                            
-                            /* Contenitore principale */
                             #pdf-wrapper { width: 100%; max-width: 100%; }
-                            
-                            /* Immagini: centrate automaticamente e limitate alla larghezza della pagina */
                             img { max-width: 100% !important; height: auto !important; page-break-inside: auto; margin: 15px auto; display: block; }
-                            
                             h1 { font-size: 20pt; font-weight: bold; margin-bottom: 12pt; page-break-after: avoid; text-align: center; color: #1f2937; }
                             h2 { font-size: 16pt; font-weight: bold; margin-bottom: 10pt; page-break-after: avoid; color: #374151; }
                             h3 { font-size: 13pt; font-weight: bold; margin-bottom: 8pt; page-break-after: avoid; }
                             p { font-size: 11pt; margin-bottom: 10pt; page-break-inside: auto; word-wrap: break-word; text-align: justify; }
-                            
-                            /* Liste */
                             ul, ol { margin-bottom: 10pt; padding-left: 20pt; }
                             li { font-size: 11pt; margin-bottom: 4pt; page-break-inside: auto; text-align: left; }
-                            
-                            /* Tabelle (CSV/Excel/Word): forza il rientro nei margini e manda a capo il testo lungo */
                             table { width: 100% !important; max-width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; font-size: 9pt; table-layout: fixed; word-wrap: break-word; }
                             tr { page-break-inside: avoid; page-break-after: auto; }
                             td, th { border: 1px solid #cbd5e1; padding: 6px; text-align: left; overflow: hidden; }
                         </style>
-                        ${htmlContent}
+                        ${safeHtmlContent}
                     </div>
                 `;
 
+                // Creiamo un contenitore temporaneo invisibile nel DOM reale
+                // Questo fa sì che il browser calcoli gli spazi e scarti le immagini corrotte PRIMA della foto
+                const tempContainer = document.createElement('div');
+                tempContainer.innerHTML = fullHtml;
+                tempContainer.style.position = 'absolute';
+                tempContainer.style.left = '-9999px';
+                tempContainer.style.top = '0';
+                tempContainer.style.width = '800px'; // Fissa una larghezza per evitare layout sballati
+                document.body.appendChild(tempContainer);
+
+                // Diamo al browser 500 millisecondi per renderizzare l'HTML ed espellere le immagini rotte
+                await new Promise(resolve => setTimeout(resolve, 500));
+
                 const opt = {
-                    // Margini esatti in millimetri: [Sopra, Sinistra, Sotto, Destra] -> Centratura perfetta
                     margin: [15, 15, 15, 15],
                     filename: filename,
                     image: { type: 'jpeg', quality: 0.98 },
                     html2canvas: {
                         scale: 2,
                         useCORS: true,
-                        letterRendering: true
-                        // Abbiamo rimosso 'windowWidth' per far calcolare la larghezza in base ai margini A4
+                        letterRendering: true,
+                        imageTimeout: 2000 // Ignora le immagini bloccate dopo 2 secondi
                     },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: { mode: ['css', 'legacy'] }
                 };
 
-                const worker = html2pdf().set(opt).from(fullHtml);
-                const pdfBlob = await worker.outputPdf('blob');
-
-                return pdfBlob;
+                try {
+                    // Generiamo il PDF dal contenitore DOM "pulito", non dalla stringa
+                    const worker = html2pdf().set(opt).from(tempContainer);
+                    const pdfBlob = await worker.outputPdf('blob');
+                    return pdfBlob;
+                } finally {
+                    // Pulizia fondamentale: rimuoviamo il div temporaneo a lavoro finito
+                    document.body.removeChild(tempContainer);
+                }
             }
 
             // --- PROCESSO DI CONVERSIONE PRINCIPALE ---
