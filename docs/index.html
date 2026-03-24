@@ -452,66 +452,59 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
+                // 1. Creiamo un contenitore IN MEMORIA (non lo aggiungiamo alla pagina)
+                const tempDiv = document.createElement('div');
 
-                // 1. Creiamo un documento virtuale in memoria per analizzare l'HTML di Mammoth
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(htmlContent, 'text/html');
-                const images = Array.from(doc.querySelectorAll('img'));
+                // Inseriamo il contenuto HTML e il CSS
+                tempDiv.innerHTML = `
+        <style>
+            .pdf-wrapper { font-family: Arial, sans-serif; line-height: 1.6; padding: 0; color: #000; }
+            .pdf-wrapper img { max-width: 100% !important; height: auto !important; margin: 15px auto; display: block; }
+            .pdf-wrapper h1 { font-size: 20pt; font-weight: bold; margin-bottom: 12pt; text-align: center; }
+            .pdf-wrapper h2 { font-size: 16pt; font-weight: bold; margin-bottom: 10pt; }
+            .pdf-wrapper h3 { font-size: 13pt; font-weight: bold; margin-bottom: 8pt; }
+            .pdf-wrapper p { font-size: 11pt; margin-bottom: 10pt; text-align: justify; }
+            .pdf-wrapper table { width: 100% !important; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
+            .pdf-wrapper td, .pdf-wrapper th { border: 1px solid #000; padding: 6px; text-align: left; }
+        </style>
+        <div class="pdf-wrapper">${htmlContent}</div>
+    `;
 
-                // 2. Testiamo ogni singola immagine in memoria (invisibile all'utente).
-                // Se è un'immagine finta/corrotta (es. EMF/PDF da Word), la eliminiamo dal codice.
+                // 2. Pulizia immagini EMF corrotte direttamente in memoria
+                const images = Array.from(tempDiv.querySelectorAll('img'));
                 const validationPromises = images.map(img => {
                     return new Promise((resolve) => {
+                        if (!img.src) {
+                            img.remove();
+                            resolve();
+                            return;
+                        }
                         const testImg = new Image();
-                        testImg.onload = () => resolve(true); // Immagine sana
+                        testImg.onload = () => resolve(); // Immagine OK
                         testImg.onerror = () => {
-                            img.remove(); // Rimuoviamo il tag <img> dal documento virtuale
-                            resolve(false);
+                            img.remove(); // Immagine corrotta: la rimuovo dall'HTML!
+                            resolve();
                         };
                         testImg.src = img.src;
                     });
                 });
 
-                // Aspettiamo che tutte le immagini siano state verificate e "bonificate"
+                // Aspettiamo che tutte le immagini siano testate
                 await Promise.all(validationPromises);
 
-                // 3. Recuperiamo l'HTML pulito (senza le immagini corrotte)
-                const safeHtmlContent = doc.body.innerHTML;
-
-                // 4. Costruiamo l'HTML finale con gli stili
-                const fullHtml = `
-                    <div id="pdf-wrapper" style="font-family: Arial, sans-serif; color: black; line-height: 1.6;">
-                        <style>
-                            * { box-sizing: border-box; }
-                            #pdf-wrapper { width: 100%; max-width: 100%; }
-                            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; margin: 15px auto; display: block; }
-                            h1 { font-size: 20pt; font-weight: bold; margin-bottom: 12pt; page-break-after: avoid; text-align: center; color: #1f2937; }
-                            h2 { font-size: 16pt; font-weight: bold; margin-bottom: 10pt; page-break-after: avoid; color: #374151; }
-                            h3 { font-size: 13pt; font-weight: bold; margin-bottom: 8pt; page-break-after: avoid; }
-                            p { font-size: 11pt; margin-bottom: 10pt; page-break-inside: auto; word-wrap: break-word; text-align: justify; }
-                            ul, ol { margin-bottom: 10pt; padding-left: 20pt; }
-                            li { font-size: 11pt; margin-bottom: 4pt; page-break-inside: auto; text-align: left; }
-                            table { width: 100% !important; max-width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; font-size: 9pt; table-layout: fixed; word-wrap: break-word; }
-                            tr { page-break-inside: avoid; page-break-after: auto; }
-                            td, th { border: 1px solid #cbd5e1; padding: 6px; text-align: left; overflow: hidden; }
-                        </style>
-                        ${safeHtmlContent}
-                    </div>
-                `;
-
+                // 3. Generazione PDF
                 const opt = {
                     margin: [15, 15, 15, 15],
                     filename: filename,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+                    html2canvas: { scale: 2, useCORS: true },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: { mode: ['css', 'legacy'] }
                 };
 
-                // Generiamo il PDF passando direttamente la stringa (molto più sicuro, evita i crash del browser)
-                const worker = html2pdf().set(opt).from(fullHtml);
-                const pdfBlob = await worker.outputPdf('blob');
-                return pdfBlob;
+                // 4. Passiamo la stringa pulita a html2pdf. 
+                // Passando la stringa, html2pdf crea un suo iframe isolato e risolve il problema delle pagine bianche.
+                return await html2pdf().set(opt).from(tempDiv.innerHTML).outputPdf('blob');
             }
 
             // --- PROCESSO DI CONVERSIONE PRINCIPALE ---
