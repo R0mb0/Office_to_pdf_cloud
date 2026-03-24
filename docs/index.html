@@ -452,71 +452,68 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
-                // Creiamo un contenitore reale e lo iniettiamo nel DOM, ma nascosto
-                const container = document.createElement('div');
-
-                // LARGHEZZA ASSOLUTA: Un foglio A4 a 96 DPI è largo esattamente 794px.
+                // 1. Definiamo la larghezza esatta di un A4 in pixel (a 96 DPI)
                 const A4_WIDTH_PX = 794;
 
-                container.style.width = `${A4_WIDTH_PX}px`; // Forza l'elemento a questa larghezza
+                // 2. Creiamo un contenitore "fisico" ma invisibile per ospitare l'HTML
+                const container = document.createElement('div');
                 container.style.position = 'absolute';
-                container.style.top = '-9999px'; // Fuori dallo schermo per non infastidire l'utente
-                container.style.left = '0';
-                container.style.backgroundColor = '#ffffff'; // Sfondo bianco pulito
-                container.style.color = '#000000';
+                container.style.left = '-9999px'; // Lo nascondiamo fuori dallo schermo
+                container.style.top = '0';
 
-                // Inseriamo gli stili e il contenuto
-                container.innerHTML = `
-                    <style>
-                        * { box-sizing: border-box; }
-                        .pdf-wrapper {
-                            width: 100%; /* Si adatta perfettamente ai 794px */
-                            padding: 0;
-                            margin: 0;
-                            font-family: Arial, sans-serif;
-                            font-size: 11pt;
-                        }
-                        /* Stili per le immagini: non sforano e restano centrate */
-                        img { max-width: 100% !important; height: auto !important; display: block; margin: 15px auto; page-break-inside: avoid; }
-                        
-                        /* Stili per le Tabelle Excel/Word: Costrette a restare nei limiti del foglio */
-                        table { width: 100% !important; max-width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 10pt; table-layout: fixed; background: #fff; }
-                        th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; word-wrap: break-word; overflow: hidden; }
-                        th { background-color: #f3f4f6; font-weight: bold; }
-                        
-                        /* Stili del testo generico */
-                        h1, h2, h3, h4 { margin-top: 25px; margin-bottom: 15px; color: #222; page-break-after: avoid; }
-                        p { line-height: 1.5; text-align: justify; margin-bottom: 12px; widows: 3; orphans: 3; }
-                    </style>
-                    <div class="pdf-wrapper">
-                        ${htmlContent}
-                    </div>
-                `;
+                // FORZIAMO la larghezza a 794px in modo che non si adatti allo schermo del pc
+                container.style.width = `${A4_WIDTH_PX}px`;
+                container.style.backgroundColor = '#ffffff'; // Sfondo bianco 
 
-                // Aggiungiamo il contenitore al Body in modo che la libreria possa calcolarne la geometria reale
+                // Impostiamo il margine di 15mm (circa 57px) per distanziare il testo dai bordi
+                container.style.padding = '57px';
+                container.style.boxSizing = 'border-box';
+                container.style.color = '#000000'; // Forza il testo nero
+
+                // Inseriamo il contenuto (es. la tabella Excel o il testo Word) nel contenitore
+                container.innerHTML = htmlContent;
                 document.body.appendChild(container);
 
-                const opt = {
-                    margin: [15, 15, 15, 15], // 15 millimetri di margine da tutti i lati del foglio A4
-                    filename: filename,
-                    image: { type: 'jpeg', quality: 1.0 },
-                    html2canvas: {
-                        scale: 2,           // Qualità alta
-                        useCORS: true,
-                        logging: false,
-                        width: A4_WIDTH_PX,       // FONDAMENTALE: Diciamo alla telecamera di scattare solo su una larghezza di 794px
-                        windowWidth: A4_WIDTH_PX  // FONDAMENTALE: Ignoriamo la risoluzione del monitor dell'utente
-                    },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak: { mode: ['css', 'legacy'] }
-                };
-
                 try {
-                    // Genera Blob
-                    const blob = await html2pdf().set(opt).from(container).outputPdf('blob');
-                    return blob;
+                    // 3. LA MAGIA: Chiamiamo html2canvas bendandolo e forzando le dimensioni
+                    const canvas = await html2canvas(container, {
+                        scale: 2, // Scala a 2 per mantenere un'ottima risoluzione del testo
+                        useCORS: true,
+                        width: A4_WIDTH_PX,        // Ignora l'elemento, scatta a 794px esatti
+                        windowWidth: A4_WIDTH_PX   // Ignora il monitor, la finestra virtuale è 794px
+                    });
+
+                    // 4. Creiamo l'immagine dal canvas e la mettiamo nel PDF (jsPDF)
+                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+                    // Creiamo un documento A4 standard
+                    const pdf = new jspdf.jsPDF({
+                        orientation: 'portrait',
+                        unit: 'mm',
+                        format: 'a4'
+                    });
+
+                    const pdfWidth = pdf.internal.pageSize.getWidth(); // Sarà 210mm
+                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width; // Calcola l'altezza in proporzione
+
+                    // Incolliamo la fotografia nel PDF
+                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+
+                    // 5. Prepariamo il file per il download
+                    const pdfBlob = pdf.output('blob');
+                    const pdfUrl = URL.createObjectURL(pdfBlob);
+
+                    return {
+                        blob: pdfBlob,
+                        url: pdfUrl,
+                        name: filename.replace(/\.[^/.]+$/, "") + ".pdf"
+                    };
+
+                } catch (error) {
+                    console.error("Errore durante la generazione del PDF:", error);
+                    throw error;
                 } finally {
-                    // Importante: eliminiamo il contenitore "fantasma" per non appesantire il sito
+                    // 6. Pulizia: distruggiamo il contenitore invisibile per non sporcare la pagina
                     if (document.body.contains(container)) {
                         document.body.removeChild(container);
                     }
