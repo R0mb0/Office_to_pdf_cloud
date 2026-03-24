@@ -450,39 +450,51 @@
                 }
             }
 
-            // Da HTML a PDF usando html2pdf (CSS Corretto per evitare pagine bianche)
+            // Da HTML a PDF usando html2pdf (Allineamento e Margini Corretti)
             async function createPdfFromHtml(htmlContent, filename) {
                 const fullHtml = `
-                    <div style="font-family: Arial, sans-serif; color: black; line-height: 1.6; padding: 20px; width: 100%; box-sizing: border-box;">
+                    <div id="pdf-wrapper" style="font-family: Arial, sans-serif; color: black; line-height: 1.6;">
                         <style>
-                            /* Gestione Immagini globale per non sforare la pagina */
-                            img { max-width: 100% !important; height: auto !important; page-break-inside: auto; margin: 10px 0; }
+                            /* Reset di base: impedisce a padding e bordi di allargare gli elementi fuori pagina */
+                            * { box-sizing: border-box; }
                             
-                            h1 { font-size: 22pt; font-weight: bold; margin-bottom: 12pt; page-break-after: avoid; }
-                            h2 { font-size: 18pt; font-weight: bold; margin-bottom: 10pt; page-break-after: avoid; }
-                            h3 { font-size: 14pt; font-weight: bold; margin-bottom: 8pt; page-break-after: avoid; }
-                            p { font-size: 11pt; margin-bottom: 10pt; page-break-inside: auto; word-wrap: break-word; }
+                            /* Contenitore principale */
+                            #pdf-wrapper { width: 100%; max-width: 100%; }
                             
-                            /* Gestione Liste */
+                            /* Immagini: centrate automaticamente e limitate alla larghezza della pagina */
+                            img { max-width: 100% !important; height: auto !important; page-break-inside: auto; margin: 15px auto; display: block; }
+                            
+                            h1 { font-size: 20pt; font-weight: bold; margin-bottom: 12pt; page-break-after: avoid; text-align: center; color: #1f2937; }
+                            h2 { font-size: 16pt; font-weight: bold; margin-bottom: 10pt; page-break-after: avoid; color: #374151; }
+                            h3 { font-size: 13pt; font-weight: bold; margin-bottom: 8pt; page-break-after: avoid; }
+                            p { font-size: 11pt; margin-bottom: 10pt; page-break-inside: auto; word-wrap: break-word; text-align: justify; }
+                            
+                            /* Liste */
                             ul, ol { margin-bottom: 10pt; padding-left: 20pt; }
-                            li { font-size: 11pt; margin-bottom: 4pt; page-break-inside: auto; }
+                            li { font-size: 11pt; margin-bottom: 4pt; page-break-inside: auto; text-align: left; }
                             
-                            /* Stili Tabelle per Excel e Word (cruciale per non sfasare) */
-                            table { width: 100% !important; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; font-size: 9pt; }
+                            /* Tabelle (CSV/Excel/Word): forza il rientro nei margini e manda a capo il testo lungo */
+                            table { width: 100% !important; max-width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; font-size: 9pt; table-layout: fixed; word-wrap: break-word; }
                             tr { page-break-inside: avoid; page-break-after: auto; }
-                            td, th { border: 1px solid #cbd5e1; padding: 6px; text-align: left; word-wrap: break-word; }
+                            td, th { border: 1px solid #cbd5e1; padding: 6px; text-align: left; overflow: hidden; }
                         </style>
                         ${htmlContent}
                     </div>
                 `;
 
                 const opt = {
-                    margin: 10, // Margini ridotti per far respirare i grafici
+                    // Margini esatti in millimetri: [Sopra, Sinistra, Sotto, Destra] -> Centratura perfetta
+                    margin: [15, 15, 15, 15],
                     filename: filename,
-                    image: { type: 'jpeg', quality: 0.95 },
-                    html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 800 }, // windowWidth fissa il layout
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: true,
+                        letterRendering: true
+                        // Abbiamo rimosso 'windowWidth' per far calcolare la larghezza in base ai margini A4
+                    },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak: { mode: ['css', 'legacy'] } // Rimosso avoid-all che causava pagine vuote
+                    pagebreak: { mode: ['css', 'legacy'] }
                 };
 
                 const worker = html2pdf().set(opt).from(fullHtml);
