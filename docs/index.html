@@ -516,19 +516,31 @@
                     processingTitle.innerText = `Elaborazione: ${file.name}...`;
 
                     let htmlContent = "";
+
                     try {
-                        // Utilizzo i nomi corretti delle funzioni presenti nel tuo file index.html
                         if (file.name.endsWith('.docx')) {
-                            htmlContent = await generateHtmlFromDocx(file);
+                            // Integrazione diretta con Mammoth (come nel tuo index.html)
+                            const arrayBuffer = await file.arrayBuffer();
+                            const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+                            htmlContent = result.value;
                         } else if (file.name.endsWith('.pdf')) {
-                            htmlContent = await generateHtmlFromPdf(file);
+                            // Integrazione diretta con PDF.js
+                            const arrayBuffer = await file.arrayBuffer();
+                            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                            let fullHtml = "";
+                            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                                const page = await pdf.getPage(pageNum);
+                                const textContent = await page.getTextContent();
+                                const pageText = textContent.items.map(item => item.str).join(" ");
+                                fullHtml += `<div style="margin-bottom: 20px;">${pageText}</div>`;
+                            }
+                            htmlContent = fullHtml;
                         }
 
                         if (htmlContent) {
-                            // Creiamo il PDF. Se createPdfFromHtml fallisce internamente, restituirà null
+                            // Chiamata alla funzione createPdfFromHtml che hai nel file
                             const pdfBlob = await createPdfFromHtml(htmlContent, newFileName);
 
-                            // PROTEZIONE: Aggiungiamo alla lista solo se il Blob è valido
                             if (pdfBlob && pdfBlob instanceof Blob) {
                                 convertedPdfs.push({
                                     name: newFileName,
@@ -536,21 +548,21 @@
                                     url: URL.createObjectURL(pdfBlob)
                                 });
                             } else {
-                                console.warn(`Salto il file ${file.name} a causa di un errore nel rendering delle immagini.`);
+                                console.warn(`Conversione fallita o annullata per: ${file.name}`);
                             }
                         }
                     } catch (err) {
-                        console.error(`Errore critico durante la conversione di ${file.name}:`, err);
+                        console.error(`Errore durante l'elaborazione di ${file.name}:`, err);
                     }
 
-                    // La barra avanza SEMPRE, garantendo che l'interfaccia non si blocchi mai
+                    // Aggiornamento progresso (questo non si blocca mai)
                     const percentComplete = Math.round(((i + 1) / total) * 100);
                     progressBar.style.width = `${percentComplete}%`;
                     progressText.innerText = `${percentComplete}%`;
 
-                    // Una piccola pausa per permettere alla UI di aggiornarsi visivamente
                     await new Promise(r => setTimeout(r, 100));
                 }
+
 
                 processingTitle.innerText = "Done!";
                 setTimeout(() => {
