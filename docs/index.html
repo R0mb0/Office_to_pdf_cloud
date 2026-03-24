@@ -452,60 +452,53 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
-                // 1. Creiamo un contenitore IN MEMORIA (non lo aggiungiamo alla pagina)
-                const tempDiv = document.createElement('div');
+                // 1. Creiamo un contenitore e lo aggiungiamo fisicamente al DOM (ma fuori dallo schermo visibile)
+                // Questo è fondamentale affinché html2canvas calcoli correttamente le dimensioni ed eviti PDF vuoti.
+                const tempContainer = document.createElement('div');
+                tempContainer.style.position = 'absolute';
+                tempContainer.style.left = '-9999px'; // Fuori dallo schermo
+                tempContainer.style.top = '0';
+                tempContainer.style.width = '800px'; // Larghezza fissa (circa A4) per evitare che testi e tabelle collassino
+                tempContainer.style.backgroundColor = '#ffffff';
 
-                // Inseriamo il contenuto HTML e il CSS
-                tempDiv.innerHTML = `
+                // 2. Inseriamo il contenuto HTML e uno stile protettivo (CSS generico sicuro per Word, Excel, PPT)
+                tempContainer.innerHTML = `
         <style>
-            .pdf-wrapper { font-family: Arial, sans-serif; line-height: 1.6; padding: 0; color: #000; }
-            .pdf-wrapper img { max-width: 100% !important; height: auto !important; margin: 15px auto; display: block; }
-            .pdf-wrapper h1 { font-size: 20pt; font-weight: bold; margin-bottom: 12pt; text-align: center; }
-            .pdf-wrapper h2 { font-size: 16pt; font-weight: bold; margin-bottom: 10pt; }
-            .pdf-wrapper h3 { font-size: 13pt; font-weight: bold; margin-bottom: 8pt; }
-            .pdf-wrapper p { font-size: 11pt; margin-bottom: 10pt; text-align: justify; }
-            .pdf-wrapper table { width: 100% !important; border-collapse: collapse; margin-bottom: 20px; font-size: 9pt; }
-            .pdf-wrapper td, .pdf-wrapper th { border: 1px solid #000; padding: 6px; text-align: left; }
+            .pdf-wrapper { font-family: Arial, sans-serif; line-height: 1.5; padding: 20px; color: #000; }
+            .pdf-wrapper img { max-width: 100% !important; height: auto !important; margin: 10px auto; display: block; page-break-inside: avoid; }
+            .pdf-wrapper table { width: 100% !important; border-collapse: collapse; margin-bottom: 15px; font-size: 10pt; page-break-inside: auto; }
+            .pdf-wrapper tr { page-break-inside: avoid; page-break-after: auto; }
+            .pdf-wrapper td, .pdf-wrapper th { border: 1px solid #000; padding: 5px; word-wrap: break-word; }
+            .pdf-wrapper h1, .pdf-wrapper h2, .pdf-wrapper h3 { page-break-after: avoid; }
+            .pdf-wrapper p { orphans: 3; widows: 3; word-wrap: break-word; }
         </style>
         <div class="pdf-wrapper">${htmlContent}</div>
     `;
 
-                // 2. Pulizia immagini EMF corrotte direttamente in memoria
-                const images = Array.from(tempDiv.querySelectorAll('img'));
-                const validationPromises = images.map(img => {
-                    return new Promise((resolve) => {
-                        if (!img.src) {
-                            img.remove();
-                            resolve();
-                            return;
-                        }
-                        const testImg = new Image();
-                        testImg.onload = () => resolve(); // Immagine OK
-                        testImg.onerror = () => {
-                            img.remove(); // Immagine corrotta: la rimuovo dall'HTML!
-                            resolve();
-                        };
-                        testImg.src = img.src;
-                    });
-                });
+                document.body.appendChild(tempContainer);
 
-                // Aspettiamo che tutte le immagini siano testate
-                await Promise.all(validationPromises);
+                // 3. Piccola pausa: diamo tempo al browser di elaborare e disegnare internamente le immagini e le tabelle in background
+                await new Promise(resolve => setTimeout(resolve, 500));
 
-                // 3. Generazione PDF
+                // 4. Parametri di Generazione PDF
                 const opt = {
-                    margin: [15, 15, 15, 15],
+                    margin: 10,
                     filename: filename,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true },
+                    html2canvas: { scale: 2, useCORS: true, logging: false },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: { mode: ['css', 'legacy'] }
                 };
 
-                // 4. Passiamo la stringa pulita a html2pdf. 
-                // Passando la stringa, html2pdf crea un suo iframe isolato e risolve il problema delle pagine bianche.
-                return await html2pdf().set(opt).from(tempDiv.innerHTML).outputPdf('blob');
+                try {
+                    // Generiamo il PDF passando l'elemento DOM reale, in modo che html2canvas possa "fotografarlo"
+                    return await html2pdf().set(opt).from(tempContainer).outputPdf('blob');
+                } finally {
+                    // 5. Pulizia: rimuoviamo sempre il contenitore temporaneo dal DOM, sia in caso di successo che di errore
+                    document.body.removeChild(tempContainer);
+                }
             }
+
 
             // --- PROCESSO DI CONVERSIONE PRINCIPALE ---
             btnConvert.addEventListener('click', async () => {
