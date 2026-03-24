@@ -450,18 +450,41 @@
                 }
             }
 
-            // Da HTML a PDF usando html2pdf (Gestione crash immagini Word)
+            // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
-                // Trucco Anti-Crash: se un'immagine (es. formati EMF/PDF incorporati da Word) 
-                // è illeggibile, forziamo il browser a nasconderla per non far bloccare la generazione
-                const safeHtmlContent = htmlContent.replace(/<img /g, '<img onerror="this.style.display=\'none\';" ');
 
+                // 1. Creiamo un documento virtuale in memoria per analizzare l'HTML di Mammoth
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(htmlContent, 'text/html');
+                const images = Array.from(doc.querySelectorAll('img'));
+
+                // 2. Testiamo ogni singola immagine in memoria (invisibile all'utente).
+                // Se è un'immagine finta/corrotta (es. EMF/PDF da Word), la eliminiamo dal codice.
+                const validationPromises = images.map(img => {
+                    return new Promise((resolve) => {
+                        const testImg = new Image();
+                        testImg.onload = () => resolve(true); // Immagine sana
+                        testImg.onerror = () => {
+                            img.remove(); // Rimuoviamo il tag <img> dal documento virtuale
+                            resolve(false);
+                        };
+                        testImg.src = img.src;
+                    });
+                });
+
+                // Aspettiamo che tutte le immagini siano state verificate e "bonificate"
+                await Promise.all(validationPromises);
+
+                // 3. Recuperiamo l'HTML pulito (senza le immagini corrotte)
+                const safeHtmlContent = doc.body.innerHTML;
+
+                // 4. Costruiamo l'HTML finale con gli stili
                 const fullHtml = `
                     <div id="pdf-wrapper" style="font-family: Arial, sans-serif; color: black; line-height: 1.6;">
                         <style>
                             * { box-sizing: border-box; }
                             #pdf-wrapper { width: 100%; max-width: 100%; }
-                            img { max-width: 100% !important; height: auto !important; page-break-inside: auto; margin: 15px auto; display: block; }
+                            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; margin: 15px auto; display: block; }
                             h1 { font-size: 20pt; font-weight: bold; margin-bottom: 12pt; page-break-after: avoid; text-align: center; color: #1f2937; }
                             h2 { font-size: 16pt; font-weight: bold; margin-bottom: 10pt; page-break-after: avoid; color: #374151; }
                             h3 { font-size: 13pt; font-weight: bold; margin-bottom: 8pt; page-break-after: avoid; }
@@ -476,42 +499,19 @@
                     </div>
                 `;
 
-                // Creiamo un contenitore temporaneo invisibile nel DOM reale
-                // Questo fa sì che il browser calcoli gli spazi e scarti le immagini corrotte PRIMA della foto
-                const tempContainer = document.createElement('div');
-                tempContainer.innerHTML = fullHtml;
-                tempContainer.style.position = 'absolute';
-                tempContainer.style.left = '-9999px';
-                tempContainer.style.top = '0';
-                tempContainer.style.width = '800px'; // Fissa una larghezza per evitare layout sballati
-                document.body.appendChild(tempContainer);
-
-                // Diamo al browser 500 millisecondi per renderizzare l'HTML ed espellere le immagini rotte
-                await new Promise(resolve => setTimeout(resolve, 500));
-
                 const opt = {
                     margin: [15, 15, 15, 15],
                     filename: filename,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: {
-                        scale: 2,
-                        useCORS: true,
-                        letterRendering: true,
-                        imageTimeout: 2000 // Ignora le immagini bloccate dopo 2 secondi
-                    },
+                    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: { mode: ['css', 'legacy'] }
                 };
 
-                try {
-                    // Generiamo il PDF dal contenitore DOM "pulito", non dalla stringa
-                    const worker = html2pdf().set(opt).from(tempContainer);
-                    const pdfBlob = await worker.outputPdf('blob');
-                    return pdfBlob;
-                } finally {
-                    // Pulizia fondamentale: rimuoviamo il div temporaneo a lavoro finito
-                    document.body.removeChild(tempContainer);
-                }
+                // Generiamo il PDF passando direttamente la stringa (molto più sicuro, evita i crash del browser)
+                const worker = html2pdf().set(opt).from(fullHtml);
+                const pdfBlob = await worker.outputPdf('blob');
+                return pdfBlob;
             }
 
             // --- PROCESSO DI CONVERSIONE PRINCIPALE ---
