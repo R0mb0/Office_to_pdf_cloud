@@ -452,36 +452,75 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
-                const styledContent = `
-                    <div style="font-family: Arial, sans-serif; color: #000; font-size: 11pt; width: 800px; margin: 0 auto; box-sizing: border-box;">
-                        <style>
-                            * { box-sizing: border-box; }
-                            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; display: block; margin: 15px auto; }
-                            table { width: 100% !important; border-collapse: collapse; margin: 15px 0; font-size: 10pt; table-layout: fixed; }
-                            tr { page-break-inside: avoid; page-break-after: auto; }
-                            td, th { border: 1px solid #999; padding: 6px; word-wrap: break-word; text-align: left; }
-                            h1, h2, h3, h4 { page-break-after: avoid; margin-top: 20px; color: #333; }
-                            p { widows: 3; orphans: 3; line-height: 1.5; word-wrap: break-word; text-align: justify; }
-                        </style>
+                // Creiamo un contenitore reale e lo iniettiamo nel DOM, ma nascosto
+                const container = document.createElement('div');
+
+                // LARGHEZZA ASSOLUTA: Un foglio A4 a 96 DPI è largo esattamente 794px.
+                const A4_WIDTH_PX = 794;
+
+                container.style.width = `${A4_WIDTH_PX}px`; // Forza l'elemento a questa larghezza
+                container.style.position = 'absolute';
+                container.style.top = '-9999px'; // Fuori dallo schermo per non infastidire l'utente
+                container.style.left = '0';
+                container.style.backgroundColor = '#ffffff'; // Sfondo bianco pulito
+                container.style.color = '#000000';
+
+                // Inseriamo gli stili e il contenuto
+                container.innerHTML = `
+                    <style>
+                        * { box-sizing: border-box; }
+                        .pdf-wrapper {
+                            width: 100%; /* Si adatta perfettamente ai 794px */
+                            padding: 0;
+                            margin: 0;
+                            font-family: Arial, sans-serif;
+                            font-size: 11pt;
+                        }
+                        /* Stili per le immagini: non sforano e restano centrate */
+                        img { max-width: 100% !important; height: auto !important; display: block; margin: 15px auto; page-break-inside: avoid; }
+                        
+                        /* Stili per le Tabelle Excel/Word: Costrette a restare nei limiti del foglio */
+                        table { width: 100% !important; max-width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 10pt; table-layout: fixed; background: #fff; }
+                        th, td { border: 1px solid #999; padding: 6px 8px; text-align: left; word-wrap: break-word; overflow: hidden; }
+                        th { background-color: #f3f4f6; font-weight: bold; }
+                        
+                        /* Stili del testo generico */
+                        h1, h2, h3, h4 { margin-top: 25px; margin-bottom: 15px; color: #222; page-break-after: avoid; }
+                        p { line-height: 1.5; text-align: justify; margin-bottom: 12px; widows: 3; orphans: 3; }
+                    </style>
+                    <div class="pdf-wrapper">
                         ${htmlContent}
                     </div>
                 `;
 
+                // Aggiungiamo il contenitore al Body in modo che la libreria possa calcolarne la geometria reale
+                document.body.appendChild(container);
+
                 const opt = {
-                    margin: [15, 15, 15, 15], // [Top, Right, Bottom, Left] in millimetri
+                    margin: [15, 15, 15, 15], // 15 millimetri di margine da tutti i lati del foglio A4
                     filename: filename,
-                    image: { type: 'jpeg', quality: 0.98 },
+                    image: { type: 'jpeg', quality: 1.0 },
                     html2canvas: {
-                        scale: 2,
+                        scale: 2,           // Qualità alta
                         useCORS: true,
                         logging: false,
-                        windowWidth: 800 // <-- Identico alla larghezza del div (800px)
+                        width: A4_WIDTH_PX,       // FONDAMENTALE: Diciamo alla telecamera di scattare solo su una larghezza di 794px
+                        windowWidth: A4_WIDTH_PX  // FONDAMENTALE: Ignoriamo la risoluzione del monitor dell'utente
                     },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: { mode: ['css', 'legacy'] }
                 };
 
-                return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
+                try {
+                    // Genera Blob
+                    const blob = await html2pdf().set(opt).from(container).outputPdf('blob');
+                    return blob;
+                } finally {
+                    // Importante: eliminiamo il contenitore "fantasma" per non appesantire il sito
+                    if (document.body.contains(container)) {
+                        document.body.removeChild(container);
+                    }
+                }
             }
 
 
