@@ -1,0 +1,16 @@
+{
+  "name": "office-to-pdf-converter",
+  "version": "1.0.0",
+  "description": "Convertitore di documenti Office in PDF basato su Vercel Serverless Functions",
+  "main": "api/convert.js",
+  "scripts": {
+    "start": "node api/convert.js"
+  },
+  "dependencies": {
+    "formidable": "^3.5.1",
+    "libreoffice-convert": "^1.5.1"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
