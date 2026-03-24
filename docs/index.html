@@ -316,14 +316,32 @@
 
             window.removeFile = (index) => { selectedFiles.splice(index, 1); renderQueue(); };
 
-            // ESTRAZIONE WORD
+            // ESTRAZIONE WORD (Ora con supporto Immagini base64)
             function extractHtmlFromDocx(file) {
                 return new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onload = function (event) {
-                        mammoth.convertToHtml({ arrayBuffer: event.target.result })
-                            .then(result => resolve(result.value))
-                            .catch(() => resolve("<p>Error reading Word file.</p>"));
+                        // Opzioni per forzare Mammoth a renderizzare le immagini in base64
+                        const options = {
+                            convertImage: mammoth.images.imgElement(function (image) {
+                                return image.read("base64").then(function (imageBuffer) {
+                                    return {
+                                        src: "data:" + image.contentType + ";base64," + imageBuffer
+                                    };
+                                });
+                            })
+                        };
+
+                        mammoth.convertToHtml({ arrayBuffer: event.target.result }, options)
+                            .then(result => {
+                                let html = result.value;
+                                if (!html.trim()) html = "<p>Il documento sembra vuoto o contiene formattazioni non supportate.</p>";
+                                resolve(html);
+                            })
+                            .catch(err => {
+                                console.error(err);
+                                resolve("<p>Errore nella lettura del file Word.</p>");
+                            });
                     };
                     reader.readAsArrayBuffer(file);
                 });
@@ -358,91 +376,113 @@
                 });
             }
 
-            // ESTRAZIONE POWERPOINT (Tramite JSZip leggendo l'XML interno)
+            // ESTRAZIONE POWERPOINT (Ora estrae Testo + Immagini)
             async function extractHtmlFromPptx(file) {
                 try {
                     const zip = new JSZip();
                     const loadedZip = await zip.loadAsync(file);
-                    let html = `<div><h1 style="text-align:center; color: #f97316;">${file.name}</h1>`;
+                    let html = `<div><h1 style="text-align:center; color: #f97316; margin-bottom: 20px;">${file.name}</h1>`;
 
-                    // Trova i file XML che rappresentano le slide (ppt/slides/slide1.xml, ecc.)
                     const slideFiles = Object.keys(loadedZip.files).filter(name => name.match(/^ppt\/slides\/slide\d+\.xml$/));
 
                     if (slideFiles.length === 0) {
-                        return "<h2>No slides found or unsupported old format (.ppt). Please use modern .pptx</h2>";
+                        return "<h2>Nessuna slide trovata. Assicurati che sia un formato .pptx moderno.</h2>";
                     }
 
-                    // Ordina le slide per numero (altrimenti slide10 viene prima di slide2)
                     slideFiles.sort((a, b) => {
-                        const numA = parseInt(a.match(/slide(\d+)\.xml/)[1]);
-                        const numB = parseInt(b.match(/slide(\d+)\.xml/)[1]);
-                        return numA - numB;
+                        return parseInt(a.match(/slide(\d+)\.xml/)[1]) - parseInt(b.match(/slide(\d+)\.xml/)[1]);
                     });
 
-                    // Estrae il testo da ogni slide
+                    const parser = new DOMParser();
+
                     for (const slideFile of slideFiles) {
                         const xmlData = await loadedZip.files[slideFile].async("string");
-                        const parser = new DOMParser();
                         const xmlDoc = parser.parseFromString(xmlData, "text/xml");
-
-                        // Il testo in PPTX è contenuto nel nodo <a:t>
-                        const textNodes = xmlDoc.getElementsByTagName("a:t");
-
                         const slideNum = slideFile.match(/slide(\d+)\.xml/)[1];
 
                         html += `
-                                <div style="border: 2px solid #ddd; border-radius: 12px; padding: 20px; margin-bottom: 30px; background-color: #fafafa; page-break-inside: avoid;">
-                                    <div style="font-size: 10pt; color: #888; text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 4px;">Slide ${slideNum}</div>
-                                    <ul style="list-style-type: none; padding: 0;">
-                            `;
+                            <div style="border: 2px solid #ddd; border-radius: 12px; padding: 20px; margin-bottom: 30px; background-color: #fafafa; page-break-inside: auto;">
+                                <div style="font-size: 10pt; color: #888; text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 4px;">Slide ${slideNum}</div>
+                        `;
 
+                        // 1. Estrazione Testo
+                        const textNodes = xmlDoc.getElementsByTagName("a:t");
+                        html += `<ul style="list-style-type: none; padding: 0;">`;
                         for (let i = 0; i < textNodes.length; i++) {
                             const text = textNodes[i].textContent.trim();
-                            if (text) {
-                                html += `<li style="font-size: 14pt; margin-bottom: 8px;">${text}</li>`;
+                            if (text) html += `<li style="font-size: 14pt; margin-bottom: 8px;">${text}</li>`;
+                        }
+                        html += `</ul>`;
+
+                        // 2. Estrazione Immagini
+                        const relsPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+                        if (loadedZip.files[relsPath]) {
+                            const relsData = await loadedZip.files[relsPath].async("string");
+                            const relsDoc = parser.parseFromString(relsData, "text/xml");
+                            const blips = xmlDoc.getElementsByTagName("a:blip");
+
+                            for (let i = 0; i < blips.length; i++) {
+                                const rId = blips[i].getAttribute("r:embed");
+                                if (rId) {
+                                    const rels = relsDoc.getElementsByTagName("Relationship");
+                                    for (let j = 0; j < rels.length; j++) {
+                                        if (rels[j].getAttribute("Id") === rId) {
+                                            let target = rels[j].getAttribute("Target");
+                                            target = target.replace("../", "ppt/"); // Risolve il percorso interno
+                                            if (loadedZip.files[target]) {
+                                                const base64 = await loadedZip.files[target].async("base64");
+                                                const ext = target.split('.').pop().toLowerCase();
+                                                const mime = (ext === 'png') ? 'image/png' : 'image/jpeg';
+                                                html += `<div style="text-align: center; margin-top: 15px;"><img src="data:${mime};base64,${base64}" style="max-width: 100%; max-height: 400px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>`;
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
-
-                        html += `</ul></div>`;
+                        html += `</div>`;
                     }
                     html += "</div>";
                     return html;
                 } catch (e) {
                     console.error(e);
-                    return `<h1>Conversion Error</h1><p>Ensure the file is a modern PowerPoint (.pptx) and not corrupt.</p>`;
+                    return `<h1>Errore di Conversione</h1><p>Impossibile leggere il file PowerPoint.</p>`;
                 }
             }
 
-            // Da HTML a PDF usando html2pdf
+            // Da HTML a PDF usando html2pdf (CSS Corretto per evitare pagine bianche)
             async function createPdfFromHtml(htmlContent, filename) {
-                // Abbiamo aggiunto stili CSS anche per le tabelle Excel e le slide di PPTX
                 const fullHtml = `
-                        <div style="font-family: Arial, sans-serif; color: black; line-height: 1.6; padding: 20px;">
-                            <style>
-                                h1 { font-size: 24pt; font-weight: bold; margin-bottom: 12pt; page-break-after: avoid; }
-                                h2 { font-size: 18pt; font-weight: bold; margin-bottom: 10pt; page-break-after: avoid; }
-                                h3 { font-size: 14pt; font-weight: bold; margin-bottom: 8pt; page-break-after: avoid; }
-                                p { font-size: 11pt; margin-bottom: 10pt; page-break-inside: avoid; }
-                                ul, ol { margin-bottom: 10pt; padding-left: 20pt; }
-                                li { font-size: 11pt; margin-bottom: 4pt; page-break-inside: avoid; }
-
-                                /* Stili per le tabelle Excel (SheetJS) */
-                                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; font-size: 10pt; }
-                                tr { page-break-inside: avoid; page-break-after: auto; }
-                                td, th { border: 1px solid #cbd5e1; padding: 8px; text-align: left; }
-                                td[t="n"] { text-align: right; } /* Numeri allineati a destra in Excel */
-                            </style>
-                            ${htmlContent}
-                        </div>
-                    `;
+                    <div style="font-family: Arial, sans-serif; color: black; line-height: 1.6; padding: 20px; width: 100%; box-sizing: border-box;">
+                        <style>
+                            /* Gestione Immagini globale per non sforare la pagina */
+                            img { max-width: 100% !important; height: auto !important; page-break-inside: auto; margin: 10px 0; }
+                            
+                            h1 { font-size: 22pt; font-weight: bold; margin-bottom: 12pt; page-break-after: avoid; }
+                            h2 { font-size: 18pt; font-weight: bold; margin-bottom: 10pt; page-break-after: avoid; }
+                            h3 { font-size: 14pt; font-weight: bold; margin-bottom: 8pt; page-break-after: avoid; }
+                            p { font-size: 11pt; margin-bottom: 10pt; page-break-inside: auto; word-wrap: break-word; }
+                            
+                            /* Gestione Liste */
+                            ul, ol { margin-bottom: 10pt; padding-left: 20pt; }
+                            li { font-size: 11pt; margin-bottom: 4pt; page-break-inside: auto; }
+                            
+                            /* Stili Tabelle per Excel e Word (cruciale per non sfasare) */
+                            table { width: 100% !important; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; font-size: 9pt; }
+                            tr { page-break-inside: avoid; page-break-after: auto; }
+                            td, th { border: 1px solid #cbd5e1; padding: 6px; text-align: left; word-wrap: break-word; }
+                        </style>
+                        ${htmlContent}
+                    </div>
+                `;
 
                 const opt = {
-                    margin: [15, 15, 15, 15],
+                    margin: 10, // Margini ridotti per far respirare i grafici
                     filename: filename,
-                    image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
+                    image: { type: 'jpeg', quality: 0.95 },
+                    html2canvas: { scale: 2, useCORS: true, letterRendering: true, windowWidth: 800 }, // windowWidth fissa il layout
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                    pagebreak: { mode: ['css', 'legacy'] } // Rimosso avoid-all che causava pagine vuote
                 };
 
                 const worker = html2pdf().set(opt).from(fullHtml);
