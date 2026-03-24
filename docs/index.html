@@ -456,72 +456,59 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
-                // 1. Definiamo la larghezza esatta di un A4 in pixel (a 96 DPI)
-                const A4_WIDTH_PX = 794;
+                return new Promise((resolve) => {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = htmlContent;
 
-                // 2. Creiamo un contenitore "fisico" ma invisibile per ospitare l'HTML
-                const container = document.createElement('div');
-                container.style.position = 'absolute';
-                container.style.left = '-9999px'; // Lo nascondiamo fuori dallo schermo
-                container.style.top = '0';
+                    // Stili di base per il contenitore temporaneo
+                    tempDiv.style.width = '800px';
+                    tempDiv.style.padding = '40px';
+                    tempDiv.style.background = 'white';
+                    tempDiv.style.color = 'black';
+                    tempDiv.style.position = 'absolute';
+                    tempDiv.style.top = '-9999px'; // Nascondilo dallo schermo
+                    tempDiv.style.left = '-9999px';
 
-                // FORZIAMO la larghezza a 794px in modo che non si adatti allo schermo del pc
-                container.style.width = `${A4_WIDTH_PX}px`;
-                container.style.backgroundColor = '#ffffff'; // Sfondo bianco
+                    // FIX 1: Trova e rimuovi le immagini vettoriali (EMF/WMF) non supportate
+                    const images = tempDiv.querySelectorAll('img');
+                    images.forEach(img => {
+                        // Se il codice base64 contiene le firme dei file EMF, rimuovi l'immagine
+                        if (img.src && (img.src.includes('ACBFTUY') || img.src.includes('AQAAAGw'))) {
+                            console.warn(`Immagine EMF rimossa nel file ${filename} per prevenire il blocco.`);
+                            img.remove();
+                        }
+                    });
 
-                // Impostiamo il margine di 15mm (circa 57px) per distanziare il testo dai bordi
-                container.style.padding = '57px';
-                container.style.boxSizing = 'border-box';
-                container.style.color = '#000000'; // Forza il testo nero
+                    document.body.appendChild(tempDiv);
 
-                // Inseriamo il contenuto (es. la tabella Excel o il testo Word) nel contenitore
-                container.innerHTML = htmlContent;
-                document.body.appendChild(container);
-
-                try {
-                    // 3. LA MAGIA: Chiamiamo html2canvas bendandolo e forzando le dimensioni
-                    const canvas = await html2canvas(container, {
-                        scale: 2, // Scala a 2 per mantenere un'ottima risoluzione del testo
+                    // FIX 2: Aggiunto timeout e gestione errori (.catch)
+                    html2canvas(tempDiv, {
+                        scale: 2,
                         useCORS: true,
-                        width: A4_WIDTH_PX,        // Ignora l'elemento, scatta a 794px esatti
-                        windowWidth: A4_WIDTH_PX   // Ignora il monitor, la finestra virtuale è 794px
+                        imageTimeout: 2000 // Aspetta massimo 2 secondi per le immagini rotte
+                    }).then(canvas => {
+                        const imgData = canvas.toDataURL('image/png');
+                        const pdf = new jspdf.jsPDF({
+                            orientation: 'portrait',
+                            unit: 'mm',
+                            format: 'a4'
+                        });
+
+                        const pdfWidth = pdf.internal.pageSize.getWidth();
+                        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+                        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                        const pdfBlob = pdf.output('blob');
+
+                        document.body.removeChild(tempDiv);
+                        resolve(pdfBlob); // Restituisce il PDF creato
+                    }).catch(error => {
+                        // FIX 3: Se qualcosa va storto, non congelare l'app
+                        console.error(`Errore durante la conversione di ${filename}:`, error);
+                        document.body.removeChild(tempDiv);
+                        resolve(null); // Risolve con null per permettere all'app di saltare il file rotto e continuare
                     });
-
-                    // 4. Creiamo l'immagine dal canvas e la mettiamo nel PDF (jsPDF)
-                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-
-                    // Creiamo un documento A4 standard
-                    const pdf = new jspdf.jsPDF({
-                        orientation: 'portrait',
-                        unit: 'mm',
-                        format: 'a4'
-                    });
-
-                    const pdfWidth = pdf.internal.pageSize.getWidth(); // Sarà 210mm
-                    const pdfHeight = (canvas.height * pdfWidth) / canvas.width; // Calcola l'altezza in proporzione
-
-                    // Incolliamo la fotografia nel PDF
-                    pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-
-                    // 5. Prepariamo il file per il download
-                    const pdfBlob = pdf.output('blob');
-                    const pdfUrl = URL.createObjectURL(pdfBlob);
-
-                    return {
-                        blob: pdfBlob,
-                        url: pdfUrl,
-                        name: filename.replace(/\.[^/.]+$/, "") + ".pdf"
-                    };
-
-                } catch (error) {
-                    console.error("Errore durante la generazione del PDF:", error);
-                    throw error;
-                } finally {
-                    // 6. Pulizia: distruggiamo il contenitore invisibile per non sporcare la pagina
-                    if (document.body.contains(container)) {
-                        document.body.removeChild(container);
-                    }
-                }
+                });
             }
 
 
