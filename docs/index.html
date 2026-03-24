@@ -516,34 +516,40 @@
                     processingTitle.innerText = `Elaborazione: ${file.name}...`;
 
                     let htmlContent = "";
-                    if (file.name.endsWith('.docx')) {
-                        htmlContent = await convertDocxToHtml(file);
-                    } else if (file.name.endsWith('.pdf')) {
-                        htmlContent = await convertPdfToHtml(file);
-                    }
-
-                    if (htmlContent) {
-                        const pdfBlob = await createPdfFromHtml(htmlContent, newFileName);
-
-                        // FIX FONDAMENTALE: Controllo rigoroso prima di creare l'URL!
-                        if (pdfBlob instanceof Blob) {
-                            convertedPdfs.push({
-                                name: newFileName,
-                                blob: pdfBlob,
-                                url: URL.createObjectURL(pdfBlob)
-                            });
-                        } else {
-                            // Se arriviamo qui, html2canvas ha fallito, ma il ciclo NON si blocca
-                            console.warn(`Generazione PDF fallita per il file: ${file.name}`);
+                    try {
+                        // Utilizzo i nomi corretti delle funzioni presenti nel tuo file index.html
+                        if (file.name.endsWith('.docx')) {
+                            htmlContent = await generateHtmlFromDocx(file);
+                        } else if (file.name.endsWith('.pdf')) {
+                            htmlContent = await generateHtmlFromPdf(file);
                         }
+
+                        if (htmlContent) {
+                            // Creiamo il PDF. Se createPdfFromHtml fallisce internamente, restituirà null
+                            const pdfBlob = await createPdfFromHtml(htmlContent, newFileName);
+
+                            // PROTEZIONE: Aggiungiamo alla lista solo se il Blob è valido
+                            if (pdfBlob && pdfBlob instanceof Blob) {
+                                convertedPdfs.push({
+                                    name: newFileName,
+                                    blob: pdfBlob,
+                                    url: URL.createObjectURL(pdfBlob)
+                                });
+                            } else {
+                                console.warn(`Salto il file ${file.name} a causa di un errore nel rendering delle immagini.`);
+                            }
+                        }
+                    } catch (err) {
+                        console.error(`Errore critico durante la conversione di ${file.name}:`, err);
                     }
 
-                    // La barra avanza anche se un file ha fallito
+                    // La barra avanza SEMPRE, garantendo che l'interfaccia non si blocchi mai
                     const percentComplete = Math.round(((i + 1) / total) * 100);
                     progressBar.style.width = `${percentComplete}%`;
                     progressText.innerText = `${percentComplete}%`;
 
-                    await new Promise(r => setTimeout(r, 400)); // Piccola pausa per la UI
+                    // Una piccola pausa per permettere alla UI di aggiornarsi visivamente
+                    await new Promise(r => setTimeout(r, 100));
                 }
 
                 processingTitle.innerText = "Done!";
