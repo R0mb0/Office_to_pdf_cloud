@@ -452,51 +452,37 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
-                // 1. Creiamo un contenitore e lo aggiungiamo fisicamente al DOM (ma fuori dallo schermo visibile)
-                // Questo è fondamentale affinché html2canvas calcoli correttamente le dimensioni ed eviti PDF vuoti.
-                const tempContainer = document.createElement('div');
-                tempContainer.style.position = 'absolute';
-                tempContainer.style.left = '-9999px'; // Fuori dallo schermo
-                tempContainer.style.top = '0';
-                tempContainer.style.width = '800px'; // Larghezza fissa (circa A4) per evitare che testi e tabelle collassino
-                tempContainer.style.backgroundColor = '#ffffff';
+                // Prepariamo il contenuto direttamente come stringa, senza appenderlo al DOM
+                const styledContent = `
+                    <div style="font-family: Arial, sans-serif; color: #000; padding: 20px; font-size: 11pt;">
+                        <style>
+                            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; display: block; margin: 15px auto; }
+                            table { width: 100% !important; border-collapse: collapse; margin: 15px 0; font-size: 10pt; }
+                            tr { page-break-inside: avoid; page-break-after: auto; }
+                            td, th { border: 1px solid #999; padding: 6px; word-wrap: break-word; text-align: left; }
+                            h1, h2, h3, h4 { page-break-after: avoid; margin-top: 20px; color: #333; }
+                            p { widows: 3; orphans: 3; line-height: 1.5; word-wrap: break-word; }
+                        </style>
+                        ${htmlContent}
+                    </div>
+                `;
 
-                // 2. Inseriamo il contenuto HTML e uno stile protettivo (CSS generico sicuro per Word, Excel, PPT)
-                tempContainer.innerHTML = `
-        <style>
-            .pdf-wrapper { font-family: Arial, sans-serif; line-height: 1.5; padding: 20px; color: #000; }
-            .pdf-wrapper img { max-width: 100% !important; height: auto !important; margin: 10px auto; display: block; page-break-inside: avoid; }
-            .pdf-wrapper table { width: 100% !important; border-collapse: collapse; margin-bottom: 15px; font-size: 10pt; page-break-inside: auto; }
-            .pdf-wrapper tr { page-break-inside: avoid; page-break-after: auto; }
-            .pdf-wrapper td, .pdf-wrapper th { border: 1px solid #000; padding: 5px; word-wrap: break-word; }
-            .pdf-wrapper h1, .pdf-wrapper h2, .pdf-wrapper h3 { page-break-after: avoid; }
-            .pdf-wrapper p { orphans: 3; widows: 3; word-wrap: break-word; }
-        </style>
-        <div class="pdf-wrapper">${htmlContent}</div>
-    `;
-
-                document.body.appendChild(tempContainer);
-
-                // 3. Piccola pausa: diamo tempo al browser di elaborare e disegnare internamente le immagini e le tabelle in background
-                await new Promise(resolve => setTimeout(resolve, 500));
-
-                // 4. Parametri di Generazione PDF
                 const opt = {
-                    margin: 10,
+                    margin: 15,
                     filename: filename,
                     image: { type: 'jpeg', quality: 0.98 },
-                    html2canvas: { scale: 2, useCORS: true, logging: false },
+                    html2canvas: {
+                        scale: 2,
+                        useCORS: true,
+                        logging: false,
+                        windowWidth: 800 // <-- Questo parametro risolve il problema della pagina singola
+                    },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
                     pagebreak: { mode: ['css', 'legacy'] }
                 };
 
-                try {
-                    // Generiamo il PDF passando l'elemento DOM reale, in modo che html2canvas possa "fotografarlo"
-                    return await html2pdf().set(opt).from(tempContainer).outputPdf('blob');
-                } finally {
-                    // 5. Pulizia: rimuoviamo sempre il contenitore temporaneo dal DOM, sia in caso di successo che di errore
-                    document.body.removeChild(tempContainer);
-                }
+                // html2pdf genererà l'PDF processando internamente la stringa, rispettando tutte le pagine
+                return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
             }
 
 
