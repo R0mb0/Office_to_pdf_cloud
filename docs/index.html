@@ -467,35 +467,15 @@
                     tempDiv.style.position = 'absolute';
                     tempDiv.style.top = '-9999px';
                     tempDiv.style.left = '-9999px';
-                    tempDiv.style.minHeight = '500px'; // FIX: Assicura che non sia mai alto 0 pixel
-
-                    const images = tempDiv.querySelectorAll('img');
-                    images.forEach(img => {
-                        if (img.src && (img.src.includes('ACBFTUY') || img.src.includes('AQAAAGw'))) {
-                            console.warn(`Immagine EMF rimossa nel file ${filename} per prevenire il blocco.`);
-                            img.remove();
-                        }
-                    });
 
                     document.body.appendChild(tempDiv);
 
                     html2canvas(tempDiv, {
                         scale: 2,
                         useCORS: true,
-                        imageTimeout: 2000,
                         logging: false
                     }).then(canvas => {
-                        // FIX: Evita il crash se html2canvas fallisce silenziosamente
-                        if (canvas.width === 0 || canvas.height === 0) {
-                            throw new Error("Canvas generato vuoto (dimensioni 0x0).");
-                        }
-
-                        // FIX: Uso JPEG invece di PNG per evitare errori "corrupt PNG" e alleggerire jsPDF
                         const imgData = canvas.toDataURL('image/jpeg', 0.95);
-
-                        if (!imgData || imgData.length < 50) {
-                            throw new Error("Dati immagine corrotti o vuoti.");
-                        }
 
                         const pdf = new jspdf.jsPDF({
                             orientation: 'portrait',
@@ -510,17 +490,14 @@
                         const pdfBlob = pdf.output('blob');
 
                         document.body.removeChild(tempDiv);
-                        resolve(pdfBlob);
+                        resolve(pdfBlob); // Tutto è andato bene!
                     }).catch(error => {
-                        console.error(`Errore durante la conversione di ${filename}:`, error);
-                        if (document.body.contains(tempDiv)) {
-                            document.body.removeChild(tempDiv);
-                        }
-                        resolve(null); // Restituisce null in caso di errore
+                        console.error(`Impossibile renderizzare ${filename}. Ignorato.`, error);
+                        document.body.removeChild(tempDiv);
+                        resolve(null); // Segnaliamo il fallimento in modo pulito
                     });
                 });
             }
-
 
 
             // --- PROCESSO DI CONVERSIONE PRINCIPALE ---
@@ -534,37 +511,34 @@
 
                 for (let i = 0; i < total; i++) {
                     const file = selectedFiles[i];
-                    processingTitle.innerText = `Processing: ${file.name}...`;
+                    const newFileName = file.name.replace(/\.[^/.]+$/, "") + ".pdf";
 
-                    const ext = file.name.split('.').pop().toLowerCase();
-                    const originalNameWithoutExt = file.name.split('.').slice(0, -1).join('.');
-                    const newFileName = `${originalNameWithoutExt}.pdf`;
+                    processingTitle.innerText = `Elaborazione: ${file.name}...`;
 
                     let htmlContent = "";
-
-                    // Smistamento logica in base al file
-                    if (['doc', 'docx'].includes(ext)) {
-                        htmlContent = await extractHtmlFromDocx(file);
-                    }
-                    else if (['xls', 'xlsx', 'csv'].includes(ext)) {
-                        htmlContent = await extractHtmlFromExcel(file);
-                    }
-                    else if (['ppt', 'pptx'].includes(ext)) {
-                        htmlContent = await extractHtmlFromPptx(file);
-                    }
-                    else {
-                        htmlContent = `<h1 style="color:red;">Format non supportato</h1><p>Non so come gestire il file .${ext}</p>`;
+                    if (file.name.endsWith('.docx')) {
+                        htmlContent = await convertDocxToHtml(file);
+                    } else if (file.name.endsWith('.pdf')) {
+                        htmlContent = await convertPdfToHtml(file);
                     }
 
-                    // Generazione e salvataggio
-                    const pdfBlob = await createPdfFromHtml(htmlContent, newFileName);
+                    if (htmlContent) {
+                        const pdfBlob = await createPdfFromHtml(htmlContent, newFileName);
 
-                    convertedPdfs.push({
-                        name: newFileName,
-                        blob: pdfBlob,
-                        url: URL.createObjectURL(pdfBlob)
-                    });
+                        // FIX FONDAMENTALE: Controllo rigoroso prima di creare l'URL!
+                        if (pdfBlob instanceof Blob) {
+                            convertedPdfs.push({
+                                name: newFileName,
+                                blob: pdfBlob,
+                                url: URL.createObjectURL(pdfBlob)
+                            });
+                        } else {
+                            // Se arriviamo qui, html2canvas ha fallito, ma il ciclo NON si blocca
+                            console.warn(`Generazione PDF fallita per il file: ${file.name}`);
+                        }
+                    }
 
+                    // La barra avanza anche se un file ha fallito
                     const percentComplete = Math.round(((i + 1) / total) * 100);
                     progressBar.style.width = `${percentComplete}%`;
                     progressText.innerText = `${percentComplete}%`;
