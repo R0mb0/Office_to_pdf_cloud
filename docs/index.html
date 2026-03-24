@@ -460,19 +460,17 @@
                     const tempDiv = document.createElement('div');
                     tempDiv.innerHTML = htmlContent;
 
-                    // Stili di base per il contenitore temporaneo
                     tempDiv.style.width = '800px';
                     tempDiv.style.padding = '40px';
                     tempDiv.style.background = 'white';
                     tempDiv.style.color = 'black';
                     tempDiv.style.position = 'absolute';
-                    tempDiv.style.top = '-9999px'; // Nascondilo dallo schermo
+                    tempDiv.style.top = '-9999px';
                     tempDiv.style.left = '-9999px';
+                    tempDiv.style.minHeight = '500px'; // FIX: Assicura che non sia mai alto 0 pixel
 
-                    // FIX 1: Trova e rimuovi le immagini vettoriali (EMF/WMF) non supportate
                     const images = tempDiv.querySelectorAll('img');
                     images.forEach(img => {
-                        // Se il codice base64 contiene le firme dei file EMF, rimuovi l'immagine
                         if (img.src && (img.src.includes('ACBFTUY') || img.src.includes('AQAAAGw'))) {
                             console.warn(`Immagine EMF rimossa nel file ${filename} per prevenire il blocco.`);
                             img.remove();
@@ -481,13 +479,24 @@
 
                     document.body.appendChild(tempDiv);
 
-                    // FIX 2: Aggiunto timeout e gestione errori (.catch)
                     html2canvas(tempDiv, {
                         scale: 2,
                         useCORS: true,
-                        imageTimeout: 2000 // Aspetta massimo 2 secondi per le immagini rotte
+                        imageTimeout: 2000,
+                        logging: false
                     }).then(canvas => {
-                        const imgData = canvas.toDataURL('image/png');
+                        // FIX: Evita il crash se html2canvas fallisce silenziosamente
+                        if (canvas.width === 0 || canvas.height === 0) {
+                            throw new Error("Canvas generato vuoto (dimensioni 0x0).");
+                        }
+
+                        // FIX: Uso JPEG invece di PNG per evitare errori "corrupt PNG" e alleggerire jsPDF
+                        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+
+                        if (!imgData || imgData.length < 50) {
+                            throw new Error("Dati immagine corrotti o vuoti.");
+                        }
+
                         const pdf = new jspdf.jsPDF({
                             orientation: 'portrait',
                             unit: 'mm',
@@ -497,19 +506,21 @@
                         const pdfWidth = pdf.internal.pageSize.getWidth();
                         const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-                        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
                         const pdfBlob = pdf.output('blob');
 
                         document.body.removeChild(tempDiv);
-                        resolve(pdfBlob); // Restituisce il PDF creato
+                        resolve(pdfBlob);
                     }).catch(error => {
-                        // FIX 3: Se qualcosa va storto, non congelare l'app
                         console.error(`Errore durante la conversione di ${filename}:`, error);
-                        document.body.removeChild(tempDiv);
-                        resolve(null); // Risolve con null per permettere all'app di saltare il file rotto e continuare
+                        if (document.body.contains(tempDiv)) {
+                            document.body.removeChild(tempDiv);
+                        }
+                        resolve(null); // Restituisce null in caso di errore
                     });
                 });
             }
+
 
 
             // --- PROCESSO DI CONVERSIONE PRINCIPALE ---
