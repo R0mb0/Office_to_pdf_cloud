@@ -95,7 +95,7 @@
         </div>
     </main>
 
-    <!-- Modal Anteprima -->
+    <!-- Preview Modal -->
     <div id="pdf-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm p-4 md:p-10 transition-opacity">
         <div class="bg-white dark:bg-gray-800 w-full max-w-5xl h-full rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
             <div class="flex justify-between items-center p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
@@ -108,7 +108,7 @@
         </div>
     </div>
 
-    <!-- Librerie Client-Side essenziali -->
+    <!-- Essential Client-Side Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -138,7 +138,7 @@
             const showStep = (stepElement) => {
                 [stepUpload, stepQueue, stepProcessing, stepResults].forEach(el => el.classList.add('hidden'));
                 [stepUpload, stepQueue, stepProcessing, stepResults].forEach(el => el.classList.remove('flex', 'block'));
-                if(stepElement === stepUpload) stepElement.classList.add('block');
+                if (stepElement === stepUpload) stepElement.classList.add('block');
                 else stepElement.classList.add('flex');
                 stepElement.classList.remove('hidden');
             };
@@ -150,11 +150,11 @@
             ['dragenter', 'dragover'].forEach(eventName => dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-active'), false));
             ['dragleave', 'drop'].forEach(eventName => dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-active'), false));
             dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
-            fileInput.addEventListener('change', function() { handleFiles(this.files); });
+            fileInput.addEventListener('change', function () { handleFiles(this.files); });
 
             function handleFiles(files) {
                 if (files.length === 0) return;
-                for(let i=0; i < files.length; i++) selectedFiles.push(files[i]);
+                for (let i = 0; i < files.length; i++) selectedFiles.push(files[i]);
                 renderQueue();
                 showStep(stepQueue);
             }
@@ -169,7 +169,7 @@
 
             function renderQueue() {
                 queueList.innerHTML = '';
-                if(selectedFiles.length === 0) return showStep(stepUpload);
+                if (selectedFiles.length === 0) return showStep(stepUpload);
                 selectedFiles.forEach((file, index) => {
                     const config = getFileConfig(file.name);
                     const item = document.createElement('div');
@@ -181,7 +181,7 @@
 
             window.removeFile = (index) => { selectedFiles.splice(index, 1); renderQueue(); };
 
-            // --- NUOVA LOGICA API SERVERLESS VERCEL ---
+            // --- NEW VERCEL SERVERLESS API LOGIC ---
             btnConvert.addEventListener('click', async () => {
                 showStep(stepProcessing);
                 progressBar.style.width = '0%';
@@ -201,7 +201,7 @@
                     formData.append('document', file);
 
                     try {
-                        // Chiamiamo la nostra Serverless Function su Vercel
+                        // Call our Serverless Function on Vercel
                         const response = await fetch('/api/convert', {
                             method: 'POST',
                             body: formData
@@ -211,7 +211,7 @@
                             throw new Error(`Server error: ${response.status}`);
                         }
 
-                        // Il server ci restituisce un file binario (PDF)
+                        // The server returns a binary file (PDF)
                         const pdfBlob = await response.blob();
 
                         convertedPdfs.push({
@@ -221,8 +221,8 @@
                         });
 
                     } catch (error) {
-                        console.error("Conversione fallita per", file.name, error);
-                        alert(`Errore durante la conversione del file ${file.name}. Il server potrebbe aver riscontrato un problema.`);
+                        console.error("Conversion failed for", file.name, error);
+                        alert(`Error during the conversion of ${file.name}. The server might have encountered an issue.`);
                     }
 
                     const percentComplete = Math.round(((i + 1) / total) * 100);
@@ -237,16 +237,16 @@
             async function generateThumbnail(pdfUrl, canvasId) {
                 try {
                     const canvas = document.getElementById(canvasId);
-                    if(!canvas) return;
+                    if (!canvas) return;
                     const loadingTask = pdfjsLib.getDocument(pdfUrl);
                     const pdf = await loadingTask.promise;
                     const page = await pdf.getPage(1);
-                    const viewport = page.getViewport({scale: 0.3});
+                    const viewport = page.getViewport({ scale: 0.3 });
                     const context = canvas.getContext('2d');
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
-                    await page.render({canvasContext: context, viewport: viewport}).promise;
-                } catch (e) { console.error("Errore miniatura", e); }
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                } catch (e) { console.error("Thumbnail error", e); }
             }
 
             function renderResults() {
@@ -282,10 +282,10 @@
             });
 
             document.getElementById('btn-download-all').addEventListener('click', () => {
-                if(convertedPdfs.length === 0) return;
+                if (convertedPdfs.length === 0) return;
                 const zip = new JSZip();
                 convertedPdfs.forEach(pdf => zip.file(pdf.name, pdf.blob));
-                zip.generateAsync({type:"blob"}).then(content => saveAs(content, "Converted_documents.zip"));
+                zip.generateAsync({ type: "blob" }).then(content => saveAs(content, "Converted_documents.zip"));
             });
 
             const modal = document.getElementById('pdf-modal'), pdfIframe = document.getElementById('pdf-iframe'), modalTitle = document.getElementById('modal-title');

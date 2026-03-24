@@ -2,8 +2,8 @@ import { IncomingForm } from 'formidable';
 import libre from 'libreoffice-convert';
 import fs from 'fs';
 
-// Disabilitiamo il body parser predefinito di Vercel perché
-// dobbiamo gestire un caricamento di file (multipart/form-data)
+// Disable Vercel's default body parser because
+// we need to handle file uploads (multipart/form-data)
 export const config = {
     api: {
         bodyParser: false,
@@ -11,51 +11,51 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-    // Accettiamo solo richieste POST
+    // Accept only POST requests
     if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Metodo non consentito. Usa POST.' });
+        return res.status(405).json({ error: 'Method not allowed. Use POST.' });
     }
 
-    // Utilizziamo 'formidable' per leggere il file inviato dal frontend
+    // Use 'formidable' to parse the file sent from the frontend
     const form = new IncomingForm({
         keepExtensions: true,
-        maxFileSize: 20 * 1024 * 1024, // Limite di 20MB per file
+        maxFileSize: 20 * 1024 * 1024, // 20MB file size limit
     });
 
     form.parse(req, async (err, fields, files) => {
         if (err) {
-            console.error('Errore durante il parsing del form:', err);
-            return res.status(500).json({ error: 'Errore nel caricamento del file' });
+            console.error('Error parsing the form:', err);
+            return res.status(500).json({ error: 'Error uploading the file' });
         }
 
-        // Recuperiamo il file (nel frontend lo chiameremo 'document')
+        // Retrieve the file (sent as 'document' from the frontend)
         const fileArray = files.document;
         if (!fileArray || fileArray.length === 0) {
-            return res.status(400).json({ error: 'Nessun file ricevuto' });
+            return res.status(400).json({ error: 'No file received' });
         }
 
         const uploadedFile = fileArray[0];
         const filePath = uploadedFile.filepath;
 
         try {
-            // Leggiamo il file temporaneo salvato sul server
+            // Read the temporary file saved on the server
             const fileBuffer = fs.readFileSync(filePath);
 
-            // Eseguiamo la conversione usando libreoffice-convert
+            // Perform the conversion using libreoffice-convert
             libre.convert(fileBuffer, '.pdf', undefined, (convertErr, done) => {
                 if (convertErr) {
-                    console.error('Errore di conversione LibreOffice:', convertErr);
-                    return res.status(500).json({ error: 'Errore durante la conversione in PDF.' });
+                    console.error('LibreOffice conversion error:', convertErr);
+                    return res.status(500).json({ error: 'Error during PDF conversion.' });
                 }
 
-                // Se la conversione va a buon fine, restituiamo il file PDF al browser!
+                // If conversion is successful, send the PDF file back to the browser!
                 res.setHeader('Content-Type', 'application/pdf');
                 res.setHeader('Content-Disposition', 'inline; filename="converted.pdf"');
                 res.send(done);
             });
         } catch (readErr) {
-            console.error('Errore di lettura del file:', readErr);
-            res.status(500).json({ error: 'Impossibile elaborare il file sul server.' });
+            console.error('File read error:', readErr);
+            res.status(500).json({ error: 'Unable to process the file on the server.' });
         }
     });
 }
