@@ -453,17 +453,40 @@
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
                 
-                const JsPDFConstructor =
-                (window.jspdf && window.jspdf.jsPDF) || // UMD più comune
-                window.jsPDF ||                         // fallback vecchie build
-                (typeof jsPDF !== 'undefined' ? jsPDF : null); // fallback globale
+                let JsPDFConstructor = null;
 
-                if (!JsPDFConstructor) {
-                    throw new Error('jsPDF non caricato: verifica lo script jsPDF prima di createPdfFromHtml().');
+                // Cerca jsPDF in tutti i namespace comuni
+                if (window.jspdf && window.jspdf.jsPDF) {
+                    JsPDFConstructor = window.jspdf.jsPDF;
+                } else if (window.jsPDF) {
+                    JsPDFConstructor = window.jsPDF;
+                } else if (typeof jsPDF !== 'undefined') {
+                    JsPDFConstructor = jsPDF;
                 }
 
+                // Se manca, prova a caricare dinamicamente la libreria (fallback robusto)
+                if (!JsPDFConstructor) {
+                    await new Promise((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+                        s.onload = resolve;
+                        s.onerror = reject;
+                        document.head.appendChild(s);
+                    });
 
-                // jsPDF (A4 in mm)
+                    if (window.jspdf && window.jspdf.jsPDF) {
+                        JsPDFConstructor = window.jspdf.jsPDF;
+                    } else if (window.jsPDF) {
+                        JsPDFConstructor = window.jsPDF;
+                    } else if (typeof jsPDF !== 'undefined') {
+                        JsPDFConstructor = jsPDF;
+                    }
+                }
+
+                if (!JsPDFConstructor) {
+                    throw new Error('Impossibile inizializzare jsPDF.');
+                }
+
                 const pdf = new JsPDFConstructor({
                     orientation: 'p',
                     unit: 'mm',
