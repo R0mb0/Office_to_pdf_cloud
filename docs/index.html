@@ -457,6 +457,7 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
+                const newFileName = originalFileName.replace(/\.[^/.]+$/, "") + ".pdf";
                 // Prepariamo il contenuto direttamente come stringa, senza appenderlo al DOM
                 const styledContent = `
                     <div style="font-family: Arial, sans-serif; color: #000; padding: 20px; font-size: 11pt;">
@@ -524,7 +525,7 @@
                     }
 
                     // Generazione e salvataggio
-                    const pdfBlob = await createPdfFromHtml(htmlContent, newFileName);
+                    const pdfBlob = await createPdfFromHtml(tempContainer, file.name);
 
                     convertedPdfs.push({
                         name: newFileName,
