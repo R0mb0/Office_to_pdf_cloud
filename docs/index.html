@@ -452,6 +452,17 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
+                
+                const JsPDFConstructor =
+                (window.jspdf && window.jspdf.jsPDF) || // UMD più comune
+                window.jsPDF ||                         // fallback vecchie build
+                (typeof jsPDF !== 'undefined' ? jsPDF : null); // fallback globale
+
+                if (!JsPDFConstructor) {
+                    throw new Error('jsPDF non caricato: verifica lo script jsPDF prima di createPdfFromHtml().');
+                }
+
+
                 // jsPDF (A4 in mm)
                 const pdf = new window.jspdf.jsPDF({
                     orientation: 'p',
