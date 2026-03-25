@@ -456,6 +456,14 @@
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
                 // Contenitore offscreen per render HTML pulito e controllato
+                if (typeof html2canvas === 'undefined') {
+                    throw new Error("html2canvas non è caricato. Verifica il tag <script> in index.html");
+                }
+                if (!window.jspdf || !window.jspdf.jsPDF) {
+                    throw new Error("jsPDF non è caricato correttamente.");
+                }
+
+                // Contenitore offscreen per render HTML pulito e controllato
                 const container = document.createElement('div');
                 container.style.position = 'fixed';
                 container.style.left = '-99999px';
@@ -484,7 +492,8 @@
                     const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
                     // PDF A4 in mm
-                    const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+                    const { jsPDF } = window.jspdf;
+                    const pdf = new jsPDF('p', 'mm', 'a4');
                     const pageWidth = pdf.internal.pageSize.getWidth();
                     const pageHeight = pdf.internal.pageSize.getHeight();
 
