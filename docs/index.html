@@ -326,31 +326,65 @@
                 return new Promise((resolve) => {
                     const reader = new FileReader();
                     reader.onload = function (event) {
+                        
                         // Opzioni per forzare Mammoth a renderizzare le immagini in base64
+                        // e filtrare quelle pericolose
                         const options = {
                             convertImage: mammoth.images.imgElement(function (image) {
                                 return image.read("base64").then(function (imageBuffer) {
+                                    const tipo = image.contentType;
+
+                                    // 1. Intercettiamo i formati vettoriali Microsoft (EMF/WMF)
+                                    // Sono questi che generano la stringa illeggibile che fa crashare html2canvas
+                                    if (tipo === "image/x-emf" || tipo === "image/x-wmf" || tipo === "image/emf" || tipo === "image/wmf") {
+                                        console.warn(`[Fix Applicato] Immagine ${tipo} bloccata per prevenire crash. Inserisco placeholder.`);
+
+                                        // 2. Creiamo un Placeholder SVG esteticamente gradevole
+                                        // Sembrerà un box grigio tratteggiato con un testo di avviso
+                                        const svgPlaceholder = `
+                                            <svg width="400" height="250" xmlns="http://www.w3.org/2000/svg">
+                                                <rect width="100%" height="100%" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="8,8"/>
+                                                <text x="50%" y="45%" font-family="sans-serif" font-size="16" font-weight="bold" fill="#475569" text-anchor="middle">Grafico non supportato</text>
+                                                <text x="50%" y="60%" font-family="sans-serif" font-size="12" fill="#64748b" text-anchor="middle">(Formato WMF/EMF nativo di Word)</text>
+                                            </svg>
+                                        `;
+                                        
+                                        // 3. Convertiamo l'SVG in Base64 in modo sicuro per il browser
+                                        const svgBase64 = btoa(unescape(encodeURIComponent(svgPlaceholder.trim())));
+
+                                        // 4. Restituiamo il placeholder invece dell'immagine corrotta
+                                        return {
+                                            src: "data:image/svg+xml;base64," + svgBase64
+                                        };
+                                    }
+
+                                    // 5. Se l'immagine è sana (JPEG, PNG, GIF), la passiamo normalmente
                                     return {
-                                        src: "data:" + image.contentType + ";base64," + imageBuffer
+                                        src: "data:" + tipo + ";base64," + imageBuffer
                                     };
+                                    
+                                }).catch(function(err) {
+                                    console.error("Errore lettura singola immagine Word:", err);
+                                    // In caso di errore di lettura, restituiamo un'immagine vuota per non bloccare tutto
+                                    return { src: "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" }; 
                                 });
                             })
                         };
 
-                        mammoth.convertToHtml({ arrayBuffer: event.target.result }, options)
-                            .then(result => {
-                                let html = result.value;
-                                if (!html.trim()) html = "<p>Il documento sembra vuoto o contiene formattazioni non supportate.</p>";
-                                resolve(html);
-                            })
-                            .catch(err => {
-                                console.error(err);
-                                resolve("<p>Errore nella lettura del file Word.</p>");
-                            });
-                    };
-                    reader.readAsArrayBuffer(file);
+            mammoth.convertToHtml({ arrayBuffer: event.target.result }, options)
+                .then(result => {
+                    let html = result.value;
+                    if (!html.trim()) html = "<p>Il documento sembra vuoto o contiene formattazioni non supportate.</p>";
+                    resolve(html);
+                })
+                .catch(err => {
+                    console.error("Errore conversione Mammoth:", err);
+                    resolve("<p>Errore nella lettura del file Word.</p>");
                 });
-            }
+        };
+        reader.readAsArrayBuffer(file);
+    });
+}
 
             // ESTRAZIONE EXCEL (Tramite SheetJS)
             function extractHtmlFromExcel(file) {
