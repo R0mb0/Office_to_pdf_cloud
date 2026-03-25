@@ -525,7 +525,7 @@
                     }
 
                     // Generazione e salvataggio
-                    const pdfBlob = await createPdfFromHtml(tempContainer, file.name);
+                    const pdfBlob = await createPdfFromHtml(htmlContent, file.name);
 
                     convertedPdfs.push({
                         name: newFileName,
