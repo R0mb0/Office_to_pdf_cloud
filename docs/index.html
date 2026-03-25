@@ -530,13 +530,30 @@
                     );
 
                     // Render HTML -> canvas con scala controllata
-                    const canvas = await html2canvas(sandbox, {
+                    let html2canvasFn = window.html2canvas || (typeof html2canvas !== 'undefined' ? html2canvas : null);
+
+                    if (!html2canvasFn) {
+                        await new Promise((resolve, reject) => {
+                            const s = document.createElement('script');
+                            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                            s.onload = resolve;
+                            s.onerror = reject;
+                            document.head.appendChild(s);
+                        });
+                        html2canvasFn = window.html2canvas || (typeof html2canvas !== 'undefined' ? html2canvas : null);
+                    }
+
+                    if (!html2canvasFn) {
+                        throw new Error('Impossibile inizializzare html2canvas.');
+                    }
+
+                    const canvas = await html2canvasFn(sandbox, {
                         backgroundColor: '#ffffff',
-                        scale: 2,               // qualità buona e stabile
+                        scale: 2,
                         useCORS: true,
                         allowTaint: true,
                         logging: false,
-                        windowWidth: 794,       // forza viewport coerente
+                        windowWidth: 794,
                         scrollX: 0,
                         scrollY: 0
                     });
