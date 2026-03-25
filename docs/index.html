@@ -48,11 +48,16 @@
 
         /* Stili per il contenitore temporaneo HTML usato per preservare la formattazione */
         .pdf-render-container {
-            font-family: Arial, sans-serif;
-            color: black;
+            position: absolute;
+            left: -9999px;
+            top: 0;
+            width: 794px; /* Esatta larghezza in pixel per un A4 a 96 DPI */
+            box-sizing: border-box;
             background-color: white;
-            padding: 40px;
-            line-height: 1.6;
+            color: black;
+            padding: 0; /* Il padding lo gestiamo tramite i margini di jsPDF */
+            margin: 0 auto;
+            text-align: left; /* Assicura che il testo parta da sinistra ma dentro margini precisi */
         }
 
             .pdf-render-container h1 {
@@ -452,156 +457,36 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
-                
-                let JsPDFConstructor = null;
+                // Prepariamo il contenuto direttamente come stringa, senza appenderlo al DOM
+                const styledContent = `
+                    <div style="font-family: Arial, sans-serif; color: #000; padding: 20px; font-size: 11pt;">
+                        <style>
+                            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; display: block; margin: 15px auto; }
+                            table { width: 100% !important; border-collapse: collapse; margin: 15px 0; font-size: 10pt; }
+                            tr { page-break-inside: avoid; page-break-after: auto; }
+                            td, th { border: 1px solid #999; padding: 6px; word-wrap: break-word; text-align: left; }
+                            h1, h2, h3, h4 { page-break-after: avoid; margin-top: 20px; color: #333; }
+                            p { widows: 3; orphans: 3; line-height: 1.5; word-wrap: break-word; }
+                        </style>
+                        ${htmlContent}
+                    </div>
+                `;
 
-                // Cerca jsPDF in tutti i namespace comuni
-                if (window.jspdf && window.jspdf.jsPDF) {
-                    JsPDFConstructor = window.jspdf.jsPDF;
-                } else if (window.jsPDF) {
-                    JsPDFConstructor = window.jsPDF;
-                } else if (typeof jsPDF !== 'undefined') {
-                    JsPDFConstructor = jsPDF;
-                }
+                const opt = {
+                    margin:       [15, 10, 15, 10], // Margini [Sopra, Destra, Sotto, Sinistra] in mm
+                    filename:     newFileName,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { 
+                        scale: 2, 
+                        useCORS: true, 
+                        windowWidth: 794, // Forza il motore a ignorare lo schermo del PC e usare la larghezza A4
+                        width: 794 // Blocca la larghezza finale dell'immagine catturata
+                    },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
 
-                // Se manca, prova a caricare dinamicamente la libreria (fallback robusto)
-                if (!JsPDFConstructor) {
-                    await new Promise((resolve, reject) => {
-                        const s = document.createElement('script');
-                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-                        s.onload = resolve;
-                        s.onerror = reject;
-                        document.head.appendChild(s);
-                    });
-
-                    if (window.jspdf && window.jspdf.jsPDF) {
-                        JsPDFConstructor = window.jspdf.jsPDF;
-                    } else if (window.jsPDF) {
-                        JsPDFConstructor = window.jsPDF;
-                    } else if (typeof jsPDF !== 'undefined') {
-                        JsPDFConstructor = jsPDF;
-                    }
-                }
-
-                if (!JsPDFConstructor) {
-                    throw new Error('Impossibile inizializzare jsPDF.');
-                }
-
-                const pdf = new JsPDFConstructor({
-                    orientation: 'p',
-                    unit: 'mm',
-                    format: 'a4',
-                    compress: true
-                });
-
-                const pageWidth = pdf.internal.pageSize.getWidth();
-                const pageHeight = pdf.internal.pageSize.getHeight();
-
-                // Margini fissi e simmetrici -> centratura solida
-                const marginX = 10; // mm
-                const marginY = 10; // mm
-                const printableWidth = pageWidth - (marginX * 2);
-                const printableHeight = pageHeight - (marginY * 2);
-
-                // Container offscreen stabile (non dipende dal layout visibile)
-                const sandbox = document.createElement('div');
-                sandbox.style.position = 'fixed';
-                sandbox.style.left = '-100000px';
-                sandbox.style.top = '0';
-                sandbox.style.width = '794px'; // larghezza "desktop" stabile (circa A4 a 96dpi)
-                sandbox.style.background = '#ffffff';
-                sandbox.style.margin = '0';
-                sandbox.style.padding = '0';
-                sandbox.style.boxSizing = 'border-box';
-                sandbox.innerHTML = htmlContent;
-                document.body.appendChild(sandbox);
-
-                try {
-                    // Attendi il caricamento delle immagini (incluse base64/data URL)
-                    const imgs = Array.from(sandbox.querySelectorAll('img'));
-                    await Promise.all(
-                        imgs.map(img => {
-                            if (img.complete) return Promise.resolve();
-                            return new Promise(resolve => {
-                                img.onload = resolve;
-                                img.onerror = resolve; // non blocca il processo
-                            });
-                        })
-                    );
-
-                    // Render HTML -> canvas con scala controllata
-                    let html2canvasFn = window.html2canvas || (typeof html2canvas !== 'undefined' ? html2canvas : null);
-
-                    if (!html2canvasFn) {
-                        await new Promise((resolve, reject) => {
-                            const s = document.createElement('script');
-                            s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-                            s.onload = resolve;
-                            s.onerror = reject;
-                            document.head.appendChild(s);
-                        });
-                        html2canvasFn = window.html2canvas || (typeof html2canvas !== 'undefined' ? html2canvas : null);
-                    }
-
-                    if (!html2canvasFn) {
-                        throw new Error('Impossibile inizializzare html2canvas.');
-                    }
-
-                    const canvas = await html2canvasFn(sandbox, {
-                        backgroundColor: '#ffffff',
-                        scale: 2,
-                        useCORS: true,
-                        allowTaint: true,
-                        logging: false,
-                        windowWidth: 794,
-                        scrollX: 0,
-                        scrollY: 0
-                    });
-
-                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-
-                    // Conversione px -> mm mantenendo proporzioni
-                    const pxToMm = 0.264583; // 96dpi
-                    const contentWidthMm = canvas.width * pxToMm;
-                    const contentHeightMm = canvas.height * pxToMm;
-                    const ratio = contentHeightMm / contentWidthMm;
-
-                    // Larghezza SEMPRE uguale all'area stampabile
-                    const renderWidth = printableWidth;
-                    const renderHeight = renderWidth * ratio;
-
-                    // X centrato in modo matematicamente simmetrico
-                    const x = (pageWidth - renderWidth) / 2;
-
-                    // Gestione multipagina robusta
-                    let rendered = 0;
-                    let pageIndex = 0;
-
-                    while (rendered < renderHeight) {
-                        if (pageIndex > 0) pdf.addPage();
-
-                        const y = marginY;
-                        const remaining = renderHeight - rendered;
-                        const currentSliceHeight = Math.min(printableHeight, remaining);
-
-                        // Trucco standard: stessa immagine, shift verticale negativo
-                        pdf.addImage(
-                            imgData,
-                            'JPEG',
-                            x,
-                            y - rendered,
-                            renderWidth,
-                            renderHeight
-                        );
-
-                        rendered += currentSliceHeight;
-                        pageIndex++;
-                    }
-
-                    pdf.save(filename);
-                } finally {
-                    sandbox.remove();
-                }
+                // html2pdf genererà l'PDF processando internamente la stringa, rispettando tutte le pagine
+                return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
             }
 
 
