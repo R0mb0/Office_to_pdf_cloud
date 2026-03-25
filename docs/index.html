@@ -201,9 +201,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
     <!-- Application Logic -->
     <script>
         // Configurazione del worker per PDF.js
@@ -303,16 +300,16 @@
                     item.className = "flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-100 dark:border-gray-600";
 
                     item.innerHTML = `
-                                <div class="flex items-center gap-3 overflow-hidden">
-                                    <div class="p-2 rounded-lg ${config.bgClass} ${config.colorClass} shrink-0">
-                                        ${config.icon}
-                                    </div>
-                                    <span class="font-medium truncate text-sm md:text-base">${file.name}</span>
+                            <div class="flex items-center gap-3 overflow-hidden">
+                                <div class="p-2 rounded-lg ${config.bgClass} ${config.colorClass} shrink-0">
+                                    ${config.icon}
                                 </div>
-                                <button class="text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-2 rounded-full transition-colors" onclick="removeFile(${index})">
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                </button>
-                            `;
+                                <span class="font-medium truncate text-sm md:text-base">${file.name}</span>
+                            </div>
+                            <button class="text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-2 rounded-full transition-colors" onclick="removeFile(${index})">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        `;
                     queueList.appendChild(item);
                 });
             }
@@ -404,9 +401,9 @@
                         const slideNum = slideFile.match(/slide(\d+)\.xml/)[1];
 
                         html += `
-                                <div style="border: 2px solid #ddd; border-radius: 12px; padding: 20px; margin-bottom: 30px; background-color: #fafafa; page-break-inside: auto;">
-                                    <div style="font-size: 10pt; color: #888; text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 4px;">Slide ${slideNum}</div>
-                            `;
+                            <div style="border: 2px solid #ddd; border-radius: 12px; padding: 20px; margin-bottom: 30px; background-color: #fafafa; page-break-inside: auto;">
+                                <div style="font-size: 10pt; color: #888; text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid #ccc; padding-bottom: 4px;">Slide ${slideNum}</div>
+                        `;
 
                         // 1. Estrazione Testo
                         const textNodes = xmlDoc.getElementsByTagName("a:t");
@@ -455,77 +452,37 @@
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
-                // Contenitore offscreen per render HTML pulito e controllato
-                if (typeof html2canvas === 'undefined') {
-                    throw new Error("html2canvas non è caricato. Verifica il tag <script> in index.html");
-                }
-                if (!window.jspdf || !window.jspdf.jsPDF) {
-                    throw new Error("jsPDF non è caricato correttamente.");
-                }
+                // Prepariamo il contenuto direttamente come stringa, senza appenderlo al DOM
+                const styledContent = `
+                    <div style="font-family: Arial, sans-serif; color: #000; padding: 20px; font-size: 11pt;">
+                        <style>
+                            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; display: block; margin: 15px auto; }
+                            table { width: 100% !important; border-collapse: collapse; margin: 15px 0; font-size: 10pt; }
+                            tr { page-break-inside: avoid; page-break-after: auto; }
+                            td, th { border: 1px solid #999; padding: 6px; word-wrap: break-word; text-align: left; }
+                            h1, h2, h3, h4 { page-break-after: avoid; margin-top: 20px; color: #333; }
+                            p { widows: 3; orphans: 3; line-height: 1.5; word-wrap: break-word; }
+                        </style>
+                        ${htmlContent}
+                    </div>
+                `;
 
-                // Contenitore offscreen per render HTML pulito e controllato
-                const container = document.createElement('div');
-                container.style.position = 'fixed';
-                container.style.left = '-99999px';
-                container.style.top = '0';
-                container.style.width = '794px'; // ~A4 a 96dpi (larghezza render)
-                container.style.background = '#ffffff';
-                container.style.margin = '0';
-                container.style.padding = '0';
-                container.style.boxSizing = 'border-box';
-                container.innerHTML = htmlContent;
-
-                document.body.appendChild(container);
-
-                try {
-                    // Render HTML -> canvas
-                    const canvas = await html2canvas(container, {
+                const opt = {
+                    margin: 15,
+                    filename: filename,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: {
                         scale: 2,
                         useCORS: true,
-                        backgroundColor: '#ffffff',
-                        scrollX: 0,
-                        scrollY: 0,
-                        windowWidth: container.scrollWidth,
-                        windowHeight: container.scrollHeight
-                    });
+                        logging: false,
+                        windowWidth: 800 // <-- Questo parametro risolve il problema della pagina singola
+                    },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['css', 'legacy'] }
+                };
 
-                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-
-                    // PDF A4 in mm
-                    const { jsPDF } = window.jspdf;
-                    const pdf = new jsPDF('p', 'mm', 'a4');
-                    const pageWidth = pdf.internal.pageSize.getWidth();
-                    const pageHeight = pdf.internal.pageSize.getHeight();
-
-                    // Margini simmetrici -> centratura stabile
-                    const marginX = 10; // mm
-                    const marginY = 10; // mm
-                    const usableWidth = pageWidth - marginX * 2;
-                    const usableHeight = pageHeight - marginY * 2;
-
-                    // Convertiamo proporzioni canvas in mm usando larghezza utile
-                    const imgWidth = usableWidth;
-                    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-                    let remainingHeight = imgHeight;
-                    let positionY = marginY;
-
-                    // Prima pagina
-                    pdf.addImage(imgData, 'JPEG', marginX, positionY, imgWidth, imgHeight);
-                    remainingHeight -= usableHeight;
-
-                    // Pagine successive (se contenuto lungo)
-                    while (remainingHeight > 0) {
-                        pdf.addPage();
-                        positionY = marginY - (imgHeight - remainingHeight);
-                        pdf.addImage(imgData, 'JPEG', marginX, positionY, imgWidth, imgHeight);
-                        remainingHeight -= usableHeight;
-                    }
-
-                    pdf.save((filename || 'documento') + '.pdf');
-                } finally {
-                    document.body.removeChild(container);
-                }
+                // html2pdf genererà l'PDF processando internamente la stringa, rispettando tutte le pagine
+                return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
             }
 
 
@@ -618,11 +575,11 @@
                     const thumb = document.createElement('div');
                     thumb.className = "w-12 h-16 bg-gray-100 dark:bg-gray-700 rounded border dark:border-gray-600 flex items-center justify-center cursor-pointer shrink-0 hover:border-primary dark:hover:border-primary transition-colors relative group overflow-hidden";
                     thumb.innerHTML = `
-                                <canvas id="${canvasId}" class="w-full h-full object-cover"></canvas>
-                                <div class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center transition-opacity">
-                                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                                </div>
-                            `;
+                            <canvas id="${canvasId}" class="w-full h-full object-cover"></canvas>
+                            <div class="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center transition-opacity">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            </div>
+                        `;
                     thumb.onclick = () => openModal(pdf.url, pdf.name);
 
                     const nameContainer = document.createElement('div');
@@ -634,9 +591,9 @@
                     downloadBtn.download = pdf.name;
                     downloadBtn.className = "bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-white p-2 md:px-4 md:py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shrink-0";
                     downloadBtn.innerHTML = `
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                                <span class="hidden md:inline">Download</span>
-                            `;
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <span class="hidden md:inline">Download</span>
+                        `;
 
                     row.appendChild(thumb);
                     row.appendChild(nameContainer);
