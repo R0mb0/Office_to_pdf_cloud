@@ -494,7 +494,7 @@
                 const newFileName = filename.replace(/\.[^/.]+$/, "") + ".pdf";
                 
                 const styledContent = `
-                    <div style="font-family: Arial, sans-serif; font-size: 11pt; color: #000; text-align: justify;">
+                    <div style="width: 794px; max-width: 794px; overflow-x: hidden; font-family: Arial, sans-serif; font-size: 11pt; color: #000; text-align: justify; box-sizing: border-box;">
                         <style>
                             /* Rimuoviamo il reset globale e pialliamo solo i margini negativi degli elementi testuali generati da Word */
                             p, h1, h2, h3, h4, h5, h6, div, span, li {
@@ -503,6 +503,7 @@
                                 text-indent: 0 !important; /* Fix vitale per i rientri di Mammoth/Word */
                                 word-wrap: break-word !important;
                                 overflow-wrap: break-word !important;
+                                max-width: 100% !important;
                             }
                             ul, ol {
                                 margin-left: 0 !important;
@@ -510,6 +511,7 @@
                             }
                             table {
                                 width: 100% !important;
+                                max-width: 100% !important;
                                 border-collapse: collapse !important;
                                 table-layout: fixed !important;
                                 margin: 15px 0;
@@ -517,12 +519,15 @@
                             td, th {
                                 border: 1px solid #666 !important;
                                 padding: 5px !important;
+                                word-wrap: break-word !important;
+                                overflow: hidden;
                             }
                             img {
                                 max-width: 100% !important;
                                 height: auto !important;
                                 display: block !important;
                                 margin: 10px 0;
+                                object-fit: contain;
                             }
                         </style>
                         ${htmlContent}
@@ -532,15 +537,15 @@
                 const opt = {
                     margin:       [15, 15, 15, 15],
                     filename:     newFileName,
-                    image:        { type: 'jpeg', quality: 0.95 },
+                    image:        { type: 'jpeg', quality: 0.90 }, // Leggermente abbassato per file con decine di immagini
                     html2canvas:  { 
-                        scale: 1.5, // RIDOTTO DA 2 a 1.5 per dimezzare l'uso di memoria ed evitare l'errore Canvas
+                        scale: 1.25, // Bilanciamento perfetto tra memoria per documenti enormi e qualità testo
                         useCORS: true, 
                         letterRendering: true,
-                        windowWidth: 794 // REINSERITO: fissa la larghezza ed evita espansioni incalcolabili
+                        windowWidth: 794 
                     },
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+                    pagebreak:    { mode: ['css', 'legacy'] } // RIMOSSO 'avoid-all' che causava il blocco della memoria su file lunghi
                 };
 
                 try {
