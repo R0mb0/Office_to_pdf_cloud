@@ -490,44 +490,37 @@
             }
 
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
-            // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte e margini)
             async function createPdfFromHtml(htmlContent, filename) {
                 const newFileName = filename.replace(/\.[^/.]+$/, "") + ".pdf";
-                
-                // FIX: Aggiunto box-sizing, padding laterale maggiore e reset dei margini per liste/rientri
+                // Prepariamo il contenuto direttamente come stringa, senza appenderlo al DOM
                 const styledContent = `
-                    <div style="font-family: Arial, sans-serif; color: #000; padding: 10px 30px; font-size: 11pt; box-sizing: border-box; max-width: 100%; overflow-x: hidden;">
+                    <div style="font-family: Arial, sans-serif; color: #000; padding: 20px; font-size: 11pt;">
                         <style>
-                            * { box-sizing: border-box; }
                             img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; display: block; margin: 15px auto; }
-                            table { width: 100% !important; border-collapse: collapse; margin: 15px 0; font-size: 10pt; table-layout: fixed; }
+                            table { width: 100% !important; border-collapse: collapse; margin: 15px 0; font-size: 10pt; }
                             tr { page-break-inside: avoid; page-break-after: auto; }
-                            td, th { border: 1px solid #999; padding: 6px; word-wrap: break-word; text-align: left; overflow: hidden; }
+                            td, th { border: 1px solid #999; padding: 6px; word-wrap: break-word; text-align: left; }
                             h1, h2, h3, h4 { page-break-after: avoid; margin-top: 20px; color: #333; }
-                            p { widows: 3; orphans: 3; line-height: 1.5; word-wrap: break-word; margin-bottom: 10px; }
-                            /* Previene che elenchi puntati o rientri di Word sbordino a sinistra tagliando le lettere */
-                            ul, ol { padding-left: 30px; margin-bottom: 10px; }
-                            li { margin-bottom: 5px; }
+                            p { widows: 3; orphans: 3; line-height: 1.5; word-wrap: break-word; }
                         </style>
                         ${htmlContent}
                     </div>
                 `;
 
                 const opt = {
-                    margin:       [15, 15, 15, 15], // Margini resi uniformi a 15mm per evitare sbilanciamenti
+                    margin:       [15, 10, 15, 10], // Margini [Sopra, Destra, Sotto, Sinistra] in mm
                     filename:     newFileName,
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { 
                         scale: 2, 
                         useCORS: true, 
-                        letterRendering: true, // Aiuta con la precisione del testo
-                        // FIX: Rimosso 'width: 794' che causava il taglio a sinistra forzando il punto di origine della cattura
-                        windowWidth: 794 // Manteniamo solo windowWidth per simulare il desktop
+                        windowWidth: 794, // Forza il motore a ignorare lo schermo del PC e usare la larghezza A4
+                        width: 794 // Blocca la larghezza finale dell'immagine catturata
                     },
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
                 };
 
-                // html2pdf genererà il PDF processando internamente la stringa
+                // html2pdf genererà l'PDF processando internamente la stringa, rispettando tutte le pagine
                 return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
             }
 
