@@ -493,62 +493,36 @@
             async function createPdfFromHtml(htmlContent, filename) {
                 const newFileName = filename.replace(/\.[^/.]+$/, "") + ".pdf";
                 
-                // Il trucco qui è neutralizzare COMPLETAMENTE i margini e rientri negativi generati
-                // da Mammoth.js (usando !important per battere gli stili inline) e far gestire 
-                // i margini della pagina direttamente a jsPDF.
                 const styledContent = `
                     <div style="font-family: Arial, sans-serif; font-size: 11pt; color: #000; text-align: justify;">
                         <style>
-                            /* RESET TOTALE per evitare il taglio a sinistra */
-                            * {
-                                box-sizing: border-box !important;
-                            }
-                            body, html {
-                                margin: 0 !important;
-                                padding: 0 !important;
-                            }
-                            /* Pialliamo via tutti i rientri negativi (margin-left e text-indent) ereditati da Word */
-                            p, h1, h2, h3, h4, h5, h6, div, span {
+                            /* Rimuoviamo il reset globale e pialliamo solo i margini negativi degli elementi testuali generati da Word */
+                            p, h1, h2, h3, h4, h5, h6, div, span, li {
                                 margin-left: 0 !important;
                                 padding-left: 0 !important;
-                                text-indent: 0 !important; /* Questo era il principale colpevole! */
+                                text-indent: 0 !important; /* Fix vitale per i rientri di Mammoth/Word */
                                 word-wrap: break-word !important;
                                 overflow-wrap: break-word !important;
                             }
-                            p {
-                                margin-top: 0 !important;
-                                margin-bottom: 12px !important;
-                                line-height: 1.5 !important;
-                            }
-                            /* Ricostruiamo le liste in modo pulito e sicuro */
                             ul, ol {
                                 margin-left: 0 !important;
-                                padding-left: 25px !important;
-                                margin-bottom: 12px !important;
+                                padding-left: 20px !important;
                             }
-                            li {
-                                margin-bottom: 6px !important;
-                                margin-left: 0 !important;
-                                text-indent: 0 !important;
-                            }
-                            /* Tabelle e Immagini sistemate */
                             table {
                                 width: 100% !important;
                                 border-collapse: collapse !important;
-                                margin-bottom: 15px !important;
                                 table-layout: fixed !important;
+                                margin: 15px 0;
                             }
                             td, th {
                                 border: 1px solid #666 !important;
-                                padding: 8px !important;
-                                text-align: left !important;
-                                word-wrap: break-word !important;
+                                padding: 5px !important;
                             }
                             img {
                                 max-width: 100% !important;
                                 height: auto !important;
                                 display: block !important;
-                                margin: 15px 0 !important;
+                                margin: 10px 0;
                             }
                         </style>
                         ${htmlContent}
@@ -556,20 +530,40 @@
                 `;
 
                 const opt = {
-                    margin:       [15, 15, 15, 15], // Lasciamo che sia jsPDF a fare 1.5cm di margine ovunque
+                    margin:       [15, 15, 15, 15],
                     filename:     newFileName,
-                    image:        { type: 'jpeg', quality: 0.98 },
+                    image:        { type: 'jpeg', quality: 0.95 },
                     html2canvas:  { 
-                        scale: 2, 
+                        scale: 1.5, // RIDOTTO DA 2 a 1.5 per dimezzare l'uso di memoria ed evitare l'errore Canvas
                         useCORS: true, 
-                        letterRendering: true
-                        // Nessuna forzatura di width o scroll, lasciamo che html2pdf crei il suo canvas naturale
+                        letterRendering: true,
+                        windowWidth: 794 // REINSERITO: fissa la larghezza ed evita espansioni incalcolabili
                     },
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
-                    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] } // Aiuta a non tagliare il testo a metà tra le pagine
+                    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
                 };
 
-                return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
+                try {
+                    return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
+                } catch (error) {
+                    console.error("PDF Generation Error:", error);
+                    
+                    // Creazione dinamica di un popup di errore (molto più sicuro e bello dell'alert standard)
+                    const errorModal = document.createElement('div');
+                    errorModal.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background-color: #ef4444; color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999; font-family: sans-serif; text-align: center; max-width: 90%;";
+                    errorModal.innerHTML = `
+                        <strong style="display: block; font-size: 16px; margin-bottom: 5px;">⚠️ Memory Limit Exceeded</strong>
+                        <span style="font-size: 14px;">The document is too large or complex. Please try converting files one by one, or split large documents.</span>
+                        <br>
+                        <button onclick="this.parentElement.remove()" style="margin-top: 10px; background: white; color: #ef4444; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">Close</button>
+                    `;
+                    document.body.appendChild(errorModal);
+                    
+                    // Auto-rimozione del popup dopo 8 secondi se l'utente non lo chiude prima
+                    setTimeout(() => { if (errorModal.parentElement) errorModal.remove(); }, 8000);
+                    
+                    throw error; // Rilanciamo l'errore per bloccare i caricamenti infiniti
+                }
             }
 
 
