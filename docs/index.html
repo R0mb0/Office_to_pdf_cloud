@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Office to PDF Converter - Full Support</title>
     <!-- Tailwind CSS for styling, responsive design, and dark mode ==> It works-->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="tailwindcss.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'media',
@@ -191,25 +191,25 @@
 
     <!-- External Libraries -->
     <!-- MAMMOTH: Estrae il documento Word convertendolo in HTML strutturato -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+    <script src="mammoth.browser.min.js"></script>
 
     <!-- SHEETJS: Estrae i documenti Excel (xls, xlsx) e li converte in tabelle HTML -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="xlsx.full.min.js"></script>
 
     <!-- HTML2PDF: Genera il PDF finale a partire dall'HTML renderizzato -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="html2pdf.bundle.min.js"></script>
 
     <!-- PDF.JS: Renderizza le vere miniature (thumbnail) dei PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="pdf.min.js"></script>
 
     <!-- JSZIP & FileSaver: Per il download di massa e parsing PPTX -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="jszip.min.js"></script>
+    <script src="FileSaver.min.js"></script>
 
     <!-- Application Logic -->
     <script>
         // Configurazione del worker per PDF.js
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
 
         document.addEventListener('DOMContentLoaded', () => {
             let selectedFiles = [];
