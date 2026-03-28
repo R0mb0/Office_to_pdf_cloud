@@ -492,35 +492,83 @@
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
                 const newFileName = filename.replace(/\.[^/.]+$/, "") + ".pdf";
-                // Prepariamo il contenuto direttamente come stringa, senza appenderlo al DOM
+                
+                // Il trucco qui è neutralizzare COMPLETAMENTE i margini e rientri negativi generati
+                // da Mammoth.js (usando !important per battere gli stili inline) e far gestire 
+                // i margini della pagina direttamente a jsPDF.
                 const styledContent = `
-                    <div style="font-family: Arial, sans-serif; color: #000; padding: 20px; font-size: 11pt;">
+                    <div style="font-family: Arial, sans-serif; font-size: 11pt; color: #000; text-align: justify;">
                         <style>
-                            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; display: block; margin: 15px auto; }
-                            table { width: 100% !important; border-collapse: collapse; margin: 15px 0; font-size: 10pt; }
-                            tr { page-break-inside: avoid; page-break-after: auto; }
-                            td, th { border: 1px solid #999; padding: 6px; word-wrap: break-word; text-align: left; }
-                            h1, h2, h3, h4 { page-break-after: avoid; margin-top: 20px; color: #333; }
-                            p { widows: 3; orphans: 3; line-height: 1.5; word-wrap: break-word; }
+                            /* RESET TOTALE per evitare il taglio a sinistra */
+                            * {
+                                box-sizing: border-box !important;
+                            }
+                            body, html {
+                                margin: 0 !important;
+                                padding: 0 !important;
+                            }
+                            /* Pialliamo via tutti i rientri negativi (margin-left e text-indent) ereditati da Word */
+                            p, h1, h2, h3, h4, h5, h6, div, span {
+                                margin-left: 0 !important;
+                                padding-left: 0 !important;
+                                text-indent: 0 !important; /* Questo era il principale colpevole! */
+                                word-wrap: break-word !important;
+                                overflow-wrap: break-word !important;
+                            }
+                            p {
+                                margin-top: 0 !important;
+                                margin-bottom: 12px !important;
+                                line-height: 1.5 !important;
+                            }
+                            /* Ricostruiamo le liste in modo pulito e sicuro */
+                            ul, ol {
+                                margin-left: 0 !important;
+                                padding-left: 25px !important;
+                                margin-bottom: 12px !important;
+                            }
+                            li {
+                                margin-bottom: 6px !important;
+                                margin-left: 0 !important;
+                                text-indent: 0 !important;
+                            }
+                            /* Tabelle e Immagini sistemate */
+                            table {
+                                width: 100% !important;
+                                border-collapse: collapse !important;
+                                margin-bottom: 15px !important;
+                                table-layout: fixed !important;
+                            }
+                            td, th {
+                                border: 1px solid #666 !important;
+                                padding: 8px !important;
+                                text-align: left !important;
+                                word-wrap: break-word !important;
+                            }
+                            img {
+                                max-width: 100% !important;
+                                height: auto !important;
+                                display: block !important;
+                                margin: 15px 0 !important;
+                            }
                         </style>
                         ${htmlContent}
                     </div>
                 `;
 
                 const opt = {
-                    margin:       [15, 10, 15, 10], // Margini [Sopra, Destra, Sotto, Sinistra] in mm
+                    margin:       [15, 15, 15, 15], // Lasciamo che sia jsPDF a fare 1.5cm di margine ovunque
                     filename:     newFileName,
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { 
                         scale: 2, 
                         useCORS: true, 
-                        windowWidth: 794, // Forza il motore a ignorare lo schermo del PC e usare la larghezza A4
-                        width: 794 // Blocca la larghezza finale dell'immagine catturata
+                        letterRendering: true
+                        // Nessuna forzatura di width o scroll, lasciamo che html2pdf crei il suo canvas naturale
                     },
-                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] } // Aiuta a non tagliare il testo a metà tra le pagine
                 };
 
-                // html2pdf genererà l'PDF processando internamente la stringa, rispettando tutte le pagine
                 return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
             }
 
