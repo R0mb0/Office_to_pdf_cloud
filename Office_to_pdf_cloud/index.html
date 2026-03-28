@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Office to PDF Converter - Full Support</title>
     <!-- Tailwind CSS for styling, responsive design, and dark mode ==> It works-->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="tailwindcss.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'media',
@@ -191,25 +191,25 @@
 
     <!-- External Libraries -->
     <!-- MAMMOTH: Estrae il documento Word convertendolo in HTML strutturato -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.21/mammoth.browser.min.js"></script>
+    <script src="mammoth.browser.min.js"></script>
 
     <!-- SHEETJS: Estrae i documenti Excel (xls, xlsx) e li converte in tabelle HTML -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="xlsx.full.min.js"></script>
 
     <!-- HTML2PDF: Genera il PDF finale a partire dall'HTML renderizzato -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="html2pdf.bundle.min.js"></script>
 
     <!-- PDF.JS: Renderizza le vere miniature (thumbnail) dei PDF -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="pdf.min.js"></script>
 
     <!-- JSZIP & FileSaver: Per il download di massa e parsing PPTX -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="jszip.min.js"></script>
+    <script src="FileSaver.min.js"></script>
 
     <!-- Application Logic -->
     <script>
         // Configurazione del worker per PDF.js
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
 
         document.addEventListener('DOMContentLoaded', () => {
             let selectedFiles = [];
@@ -492,36 +492,83 @@
             // Da HTML a PDF usando html2pdf (Gestione DEFINITIVA immagini Word corrotte)
             async function createPdfFromHtml(htmlContent, filename) {
                 const newFileName = filename.replace(/\.[^/.]+$/, "") + ".pdf";
-                // Prepariamo il contenuto direttamente come stringa, senza appenderlo al DOM
+                
                 const styledContent = `
-                    <div style="font-family: Arial, sans-serif; color: #000; padding: 20px; font-size: 11pt;">
+                    <div style="width: 794px; max-width: 794px; overflow-x: hidden; font-family: Arial, sans-serif; font-size: 11pt; color: #000; text-align: justify; box-sizing: border-box;">
                         <style>
-                            img { max-width: 100% !important; height: auto !important; page-break-inside: avoid; display: block; margin: 15px auto; }
-                            table { width: 100% !important; border-collapse: collapse; margin: 15px 0; font-size: 10pt; }
-                            tr { page-break-inside: avoid; page-break-after: auto; }
-                            td, th { border: 1px solid #999; padding: 6px; word-wrap: break-word; text-align: left; }
-                            h1, h2, h3, h4 { page-break-after: avoid; margin-top: 20px; color: #333; }
-                            p { widows: 3; orphans: 3; line-height: 1.5; word-wrap: break-word; }
+                            /* Rimuoviamo il reset globale e pialliamo solo i margini negativi degli elementi testuali generati da Word */
+                            p, h1, h2, h3, h4, h5, h6, div, span, li {
+                                margin-left: 0 !important;
+                                padding-left: 0 !important;
+                                text-indent: 0 !important; /* Fix vitale per i rientri di Mammoth/Word */
+                                word-wrap: break-word !important;
+                                overflow-wrap: break-word !important;
+                                max-width: 100% !important;
+                            }
+                            ul, ol {
+                                margin-left: 0 !important;
+                                padding-left: 20px !important;
+                            }
+                            table {
+                                width: 100% !important;
+                                max-width: 100% !important;
+                                border-collapse: collapse !important;
+                                table-layout: fixed !important;
+                                margin: 15px 0;
+                            }
+                            td, th {
+                                border: 1px solid #666 !important;
+                                padding: 5px !important;
+                                word-wrap: break-word !important;
+                                overflow: hidden;
+                            }
+                            img {
+                                max-width: 100% !important;
+                                height: auto !important;
+                                display: block !important;
+                                margin: 10px 0;
+                                object-fit: contain;
+                            }
                         </style>
                         ${htmlContent}
                     </div>
                 `;
 
                 const opt = {
-                    margin:       [15, 10, 15, 10], // Margini [Sopra, Destra, Sotto, Sinistra] in mm
+                    margin:       [15, 15, 15, 15],
                     filename:     newFileName,
-                    image:        { type: 'jpeg', quality: 0.98 },
+                    image:        { type: 'jpeg', quality: 0.90 }, // Leggermente abbassato per file con decine di immagini
                     html2canvas:  { 
-                        scale: 2, 
+                        scale: 1.25, // Bilanciamento perfetto tra memoria per documenti enormi e qualità testo
                         useCORS: true, 
-                        windowWidth: 794, // Forza il motore a ignorare lo schermo del PC e usare la larghezza A4
-                        width: 794 // Blocca la larghezza finale dell'immagine catturata
+                        letterRendering: true,
+                        windowWidth: 794 
                     },
-                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak:    { mode: ['css', 'legacy'] } // RIMOSSO 'avoid-all' che causava il blocco della memoria su file lunghi
                 };
 
-                // html2pdf genererà l'PDF processando internamente la stringa, rispettando tutte le pagine
-                return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
+                try {
+                    return await html2pdf().set(opt).from(styledContent).outputPdf('blob');
+                } catch (error) {
+                    console.error("PDF Generation Error:", error);
+                    
+                    // Creazione dinamica di un popup di errore (molto più sicuro e bello dell'alert standard)
+                    const errorModal = document.createElement('div');
+                    errorModal.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background-color: #ef4444; color: white; padding: 15px 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 9999; font-family: sans-serif; text-align: center; max-width: 90%;";
+                    errorModal.innerHTML = `
+                        <strong style="display: block; font-size: 16px; margin-bottom: 5px;">⚠️ Memory Limit Exceeded</strong>
+                        <span style="font-size: 14px;">The document is too large or complex. Please try converting files one by one, or split large documents.</span>
+                        <br>
+                        <button onclick="this.parentElement.remove()" style="margin-top: 10px; background: white; color: #ef4444; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; font-weight: bold;">Close</button>
+                    `;
+                    document.body.appendChild(errorModal);
+                    
+                    // Auto-rimozione del popup dopo 8 secondi se l'utente non lo chiude prima
+                    setTimeout(() => { if (errorModal.parentElement) errorModal.remove(); }, 8000);
+                    
+                    throw error; // Rilanciamo l'errore per bloccare i caricamenti infiniti
+                }
             }
 
 
