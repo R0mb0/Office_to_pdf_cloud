@@ -2,7 +2,8 @@
 
 # 📄 Office to PDF Cloud-Free ☁️
 
-
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/4bb84dcb342b405a84653242a1430c8c)](https://app.codacy.com/gh/R0mb0/Office_to_pdf_cloud/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![pages-build-deployment](https://github.com/R0mb0/Office_to_pdf_cloud/actions/workflows/pages/pages-build-deployment/badge.svg)](https://github.com/R0mb0/Office_to_pdf_cloud/actions/workflows/pages/pages-build-deployment)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://r0mb0.github.io/Office_to_pdf_cloud/)
 [![Open Source Love svg3](https://badges.frapsoft.com/os/v3/open-source.svg?v=103)](https://r0mb0.github.io/Office_to_pdf_cloud/)
 [![MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/license/mit)
@@ -17,6 +18,10 @@
 <div align="center">
   
 ## [👉 Click here to test the page! 👈](https://r0mb0.github.io/Office_to_pdf_cloud/)
+
+[![00.png](https://github.com/R0mb0/Office_to_pdf_cloud/blob/main/Readme_imgs/00.png)](https://r0mb0.github.io/Office_to_pdf_cloud/)
+[![01.png](https://github.com/R0mb0/Office_to_pdf_cloud/blob/main/Readme_imgs/01.png)](https://r0mb0.github.io/Office_to_pdf_cloud/)
+[![02.png](https://github.com/R0mb0/Office_to_pdf_cloud/blob/main/Readme_imgs/02.png)](https://r0mb0.github.io/Office_to_pdf_cloud/)
 
 </div>
 
